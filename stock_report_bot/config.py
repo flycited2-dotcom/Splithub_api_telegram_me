@@ -1,0 +1,23 @@
+"""Конфигурация сервиса. Читает .env рядом с проектом (python-decouple),
+с fallback на переменные окружения."""
+import os
+
+from decouple import Config, RepositoryEnv, config as env_config
+
+_ENV_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env'
+)
+config = Config(RepositoryEnv(_ENV_PATH)) if os.path.exists(_ENV_PATH) else env_config
+
+# БД сайта (read-only): те же значения, что в /opt/oasis/.env проекта сайта.
+DB = {
+    'host': config('DB_HOST', default='localhost'),
+    'port': config('DB_PORT', default='5432'),
+    'dbname': config('DB_NAME'),
+    'user': config('DB_USER'),
+    'password': config('DB_PASSWORD'),
+}
+
+TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
+TELEGRAM_OWNER_CHAT_ID = config('TELEGRAM_OWNER_CHAT_ID', default='')
+TELEGRAM_API_URL = config('TELEGRAM_API_URL', default='https://api.telegram.org')
