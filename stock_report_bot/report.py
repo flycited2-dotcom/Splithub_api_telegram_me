@@ -5,8 +5,8 @@ from itertools import groupby
 
 SUPPLIER_LABELS = {'rusklimat': 'Русклимат', 'breeze': 'Бриз', 'daichi': 'Daichi'}
 
-# Поставщик, для которого берём остаток со ВСЕХ складов (а не только Крым).
-ALL_WAREHOUSES_SOURCE = 'breeze'
+# Поставщик, у которого опт-цена (base) берётся из Бриз API, а не из БД.
+BREEZE_SOURCE = 'breeze'
 
 
 def _supplier_label(source):
@@ -21,9 +21,7 @@ def _fmt_price(value):
 
 
 def _qty_for(row):
-    """Бриз — сумма по всем складам, остальные — крымский остаток."""
-    if row['source'] == ALL_WAREHOUSES_SOURCE:
-        return int(row['total_qty'] or 0)
+    """Крымский остаток (Симферополь) — для всех поставщиков."""
     return int(row['crimea_qty'] or 0)
 
 
@@ -31,7 +29,7 @@ def _price_for(row, breez_base):
     """Опт-цена. Бриз отдаёт опт (base) только в своём API — в БД сайта у него
     розница. Поэтому для Бриза берём base по nc_code из breez_base; если его нет
     (ключ не задан/ошибка) — откатываемся на price_wholesale из БД."""
-    if row['source'] == ALL_WAREHOUSES_SOURCE:
+    if row['source'] == BREEZE_SOURCE:
         base = (breez_base or {}).get(row.get('nc_code'))
         if base is not None:
             return base
@@ -39,8 +37,12 @@ def _price_for(row, breez_base):
 
 
 def _product_line(row, breez_base):
+    """Строка `• Бренд Наименование — опт-цена ₽ — N шт.` Бренд впереди, т.к. в
+    title он есть не всегда."""
+    brand = html.escape((row.get('brand') or '').strip())
     name = html.escape(row['title'] or '')
-    return f'• {name} — {_fmt_price(_price_for(row, breez_base))} — {_qty_for(row)} шт.'
+    title = f'{brand} {name}'.strip() if brand else name
+    return f'• {title} — {_fmt_price(_price_for(row, breez_base))} — {_qty_for(row)} шт.'
 
 
 def _chunk_lines(lines, max_len):
@@ -60,17 +62,17 @@ def _chunk_lines(lines, max_len):
 
 
 def build_report_chunks(rows, breez_base=None, today=None, max_len=3900):
-    """Список Telegram-сообщений (HTML) с остатками, сгруппированных по поставщику.
-    breez_base: {nc_code: base} опт-цен Бриза (из Бриз API); для остальных опт
-    берётся из price_wholesale БД."""
+    """Список Telegram-сообщений (HTML) с остатками (Крым, Симферополь),
+    сгруппированных по поставщику и бренду. breez_base: {nc_code: base} опт-цен
+    Бриза из Бриз API; для остальных опт берётся из price_wholesale БД."""
     today = today or date.today()
-    header = f'📦 Остатки в наличии (Крым + материк Бриза) — {today.strftime("%d.%m.%Y")}'
+    header = f'📦 Остатки в наличии (Крым, Симферополь) — {today.strftime("%d.%m.%Y")}'
 
     rows = [r for r in rows if _qty_for(r) > 0]
     if not rows:
         return [f'{header}\n\nОстатков в наличии нет.']
 
-    rows = sorted(rows, key=lambda r: (r['source'] or '', r['title'] or ''))
+    rows = sorted(rows, key=lambda r: (r['source'] or '', (r.get('brand') or ''), r['title'] or ''))
     lines = [header, '']
     for source, group in groupby(rows, key=lambda r: r['source']):
         lines.append(f'<b>{html.escape(_supplier_label(source))}</b>')
