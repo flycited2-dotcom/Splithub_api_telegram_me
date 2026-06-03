@@ -6,22 +6,33 @@
 `_CRIMEA_RE` в sync сайта — для Бриза это «…Крым» и т.п.). Материковые остатки
 (Шерризон/Ростов/Киржач) и «под заказ» в отчёт НЕ попадают.
 
-Категории: только кондиционеры нужных типов (Бытовые сплит / Полупромышленные /
-Мобильные); расходники (Аксессуары) и мультисплит-системы исключены. Опт-цена для
-Rusklimat/Daichi — `price_wholesale` из БД; для Бриза — base из Бриз API
-(stock_report_bot/breez.py). Наименование — `title` с подставленным брендом
-(`catalog_brand`).
+Только кондиционеры нужных типов:
+- категории `REPORT_CATEGORY_IDS` (Бытовые сплит / Полупромышленные / Мобильные);
+- `btu_calc > 0` — у товара есть мощность охлаждения, т.е. это кондиционер, а не
+  аксессуар/инструмент (мойки, развальцовки, насосы, шланги, сифоны… btu пуст);
+- `EXCLUDE_TITLE_PATTERNS` — добивают аксессуары с ошибочно проставленным btu
+  (виброопоры «V40P»→40, охладитель воздуха, зимний комплект) и мультисплит.
+
+Опт-цена для Rusklimat/Daichi — `price_wholesale` из БД; для Бриза — base из Бриз
+API (stock_report_bot/breez.py). Наименование — `title` + бренд (`catalog_brand`).
 """
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
 from stock_report_bot.config import DB
 
-# Категории-кондиционеры, нужные в отчёте (id в catalog_category сайта):
+# Категории-кондиционеры в отчёте (id в catalog_category сайта):
 #   2 — Бытовые сплит-системы, 6 — Полупромышленные сплит-системы
 #   (кассетные/канальные/напольно-потолочные/колонные), 7 — Мобильные кондиционеры.
-# Исключаются: 116 «Аксессуары» (расходники) и мультисплит-системы (по названию).
+# Аксессуары (id 116) сюда не входят.
 REPORT_CATEGORY_IDS = [2, 6, 7]
+
+# Названия-исключения: мультисплит + аксессуары, которым compute_btu ошибочно
+# проставил btu_calc (виброопоры/охладитель/зимний комплект) и они прошли btu-фильтр.
+EXCLUDE_TITLE_PATTERNS = [
+    '%мульти%', '%виброопор%', '%охладитель воздуха%',
+    '%комплект зимний%', '%зимний комплект%',
+]
 
 _QUERY = """
 SELECT p.source,
@@ -37,7 +48,8 @@ WHERE p.is_active = TRUE
   AND s.warehouse = %(crimea)s
   AND s.quantity > 0
   AND p.category_id = ANY(%(cats)s)
-  AND p.title NOT ILIKE %(multi)s
+  AND p.btu_calc > 0
+  AND NOT (p.title ILIKE ANY(%(deny)s))
 ORDER BY p.source, b.title NULLS LAST, p.title;
 """
 
@@ -53,7 +65,7 @@ def fetch_stock_rows():
             cur.execute(_QUERY, {
                 'crimea': 'Симферополь',
                 'cats': REPORT_CATEGORY_IDS,
-                'multi': '%мульти%',
+                'deny': EXCLUDE_TITLE_PATTERNS,
             })
             return cur.fetchall()
     finally:

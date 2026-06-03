@@ -4,13 +4,23 @@ from datetime import date
 from itertools import groupby
 
 SUPPLIER_LABELS = {'rusklimat': 'Русклимат', 'breeze': 'Бриз', 'daichi': 'Daichi'}
+# Свой эмодзи у каждого поставщика — чтобы блоки различались с одного взгляда.
+SUPPLIER_EMOJI = {'rusklimat': '🟦', 'daichi': '🟥', 'breeze': '🟩'}
 
 # Поставщик, у которого опт-цена (base) берётся из Бриз API, а не из БД.
 BREEZE_SOURCE = 'breeze'
 
+# Полоска-разделитель между брендами (как в боте заказов — удобно читать).
+DIVIDER = '━━━━━━━━━━━━'
+
 
 def _supplier_label(source):
     return SUPPLIER_LABELS.get(source, source or '—')
+
+
+def _supplier_header(source):
+    emoji = SUPPLIER_EMOJI.get(source, '▫️')
+    return f'{emoji} <b>{html.escape(_supplier_label(source)).upper()}</b>'
 
 
 def _fmt_price(value):
@@ -37,12 +47,12 @@ def _price_for(row, breez_base):
 
 
 def _product_line(row, breez_base):
-    """Строка `• Бренд Наименование — опт-цена ₽ — N шт.` Бренд впереди, т.к. в
-    title он есть не всегда."""
+    """`• <b>Бренд</b> Наименование — опт-цена ₽ — N шт.` Бренд жирным и впереди,
+    т.к. в title он есть не всегда."""
     brand = html.escape((row.get('brand') or '').strip())
     name = html.escape(row['title'] or '')
-    title = f'{brand} {name}'.strip() if brand else name
-    return f'• {title} — {_fmt_price(_price_for(row, breez_base))} — {_qty_for(row)} шт.'
+    head = f'<b>{brand}</b> ' if brand else ''
+    return f'• {head}{name} — {_fmt_price(_price_for(row, breez_base))} — {_qty_for(row)} шт.'
 
 
 def _chunk_lines(lines, max_len):
@@ -63,20 +73,28 @@ def _chunk_lines(lines, max_len):
 
 def build_report_chunks(rows, breez_base=None, today=None, max_len=3900):
     """Список Telegram-сообщений (HTML) с остатками (Крым, Симферополь),
-    сгруппированных по поставщику и бренду. breez_base: {nc_code: base} опт-цен
-    Бриза из Бриз API; для остальных опт берётся из price_wholesale БД."""
+    сгруппированных по поставщику и бренду, с разделителями между брендами.
+    breez_base: {nc_code: base} опт-цен Бриза из Бриз API; для остальных опт
+    берётся из price_wholesale БД."""
     today = today or date.today()
-    header = f'📦 Остатки в наличии (Крым, Симферополь) — {today.strftime("%d.%m.%Y")}'
+    header_lines = ['📦 <b>Остатки в наличии</b> — Крым (Симферополь)',
+                    f'🗓 {today.strftime("%d.%m.%Y")}']
 
     rows = [r for r in rows if _qty_for(r) > 0]
     if not rows:
-        return [f'{header}\n\nОстатков в наличии нет.']
+        return ['\n'.join(header_lines) + '\n\nОстатков в наличии нет.']
 
     rows = sorted(rows, key=lambda r: (r['source'] or '', (r.get('brand') or ''), r['title'] or ''))
-    lines = [header, '']
+    lines = header_lines + ['']
     for source, group in groupby(rows, key=lambda r: r['source']):
-        lines.append(f'<b>{html.escape(_supplier_label(source))}</b>')
-        lines.extend(_product_line(r, breez_base) for r in group)
+        lines.append(_supplier_header(source))
+        prev_brand = None
+        for r in group:
+            brand = r.get('brand') or ''
+            if prev_brand is not None and brand != prev_brand:
+                lines.append(DIVIDER)   # полоска между брендами
+            lines.append(_product_line(r, breez_base))
+            prev_brand = brand
         lines.append('')
 
     return _chunk_lines(lines, max_len)
