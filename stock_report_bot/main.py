@@ -3,6 +3,7 @@
 раз в сутки (примеры в README)."""
 import logging
 import sys
+import time
 
 from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID
 from stock_report_bot.breez import fetch_breez_base_by_nc
@@ -21,7 +22,12 @@ def main():
     rows = fetch_stock_rows()
     breez_base = fetch_breez_base_by_nc()   # опт (base) Бриза напрямую из Бриз API
     chunks = build_report_chunks(rows, breez_base=breez_base)
-    sent = sum(1 for chunk in chunks if send_telegram(chunk, TELEGRAM_OWNER_CHAT_ID))
+    sent = 0
+    for i, chunk in enumerate(chunks):
+        if i:
+            time.sleep(1.5)   # не слать залпом в один чат: лимит Telegram ~1 msg/с + щадим socat-прокси
+        if send_telegram(chunk, TELEGRAM_OWNER_CHAT_ID):
+            sent += 1
     logger.info('Отправлено %d/%d сообщений (позиций: %d)', sent, len(chunks), len(rows))
     return 0 if sent == len(chunks) else 2
 
