@@ -13,8 +13,10 @@
 - `EXCLUDE_TITLE_PATTERNS` — добивают аксессуары с ошибочно проставленным btu
   (виброопоры «V40P»→40, охладитель воздуха, зимний комплект) и мультисплит.
 
-Опт-цена для Rusklimat/Daichi — `price_wholesale` из БД; для Бриза — base из Бриз
-API (stock_report_bot/breez.py). Наименование — `title` + бренд (`catalog_brand`).
+Опт-цена: Daichi — `price_wholesale` из БД; Бриз и Rusklimat идут через фид Бриза,
+у них в БД розница, поэтому опт (base) берём из Бриз API по nc_code
+(stock_report_bot/breez.py), с откатом на `price_wholesale`. Наименование — `title`
++ бренд (`catalog_brand`).
 """
 import psycopg2
 from psycopg2.extras import RealDictCursor

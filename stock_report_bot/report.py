@@ -7,8 +7,10 @@ SUPPLIER_LABELS = {'rusklimat': 'Русклимат', 'breeze': 'Бриз', 'dai
 # Свой эмодзи у каждого поставщика — чтобы блоки различались с одного взгляда.
 SUPPLIER_EMOJI = {'rusklimat': '🟦', 'daichi': '🟥', 'breeze': '🟩'}
 
-# Поставщик, у которого опт-цена (base) берётся из Бриз API, а не из БД.
-BREEZE_SOURCE = 'breeze'
+# Поставщики, идущие через фид Бриза (NC-namespace Бриза): опт (base) берётся из
+# Бриз API по nc_code, т.к. в БД сайта у них лежит розница (ric). Daichi —
+# отдельный дистрибьютор, его опт корректно лежит в price_wholesale БД.
+BREEZ_BASE_SOURCES = ('breeze', 'rusklimat')
 
 # Полоски-разделители на всю ширину сообщения: тонкая — после каждой позиции,
 # двойная — между брендами. Как в боте заказов: так удобнее ориентироваться.
@@ -38,10 +40,11 @@ def _qty_for(row):
 
 
 def _price_for(row, breez_base):
-    """Опт-цена. Бриз отдаёт опт (base) только в своём API — в БД сайта у него
-    розница. Поэтому для Бриза берём base по nc_code из breez_base; если его нет
-    (ключ не задан/ошибка) — откатываемся на price_wholesale из БД."""
-    if row['source'] == BREEZE_SOURCE:
+    """Опт-цена. Бриз и Русклимат идут через фид Бриза, который отдаёт опт (base)
+    только в своём API — в БД сайта у них розница. Поэтому для них берём base по
+    nc_code из breez_base; если его нет (ключ не задан/ошибка/NC не в фиде) —
+    откатываемся на price_wholesale из БД. Daichi всегда из БД."""
+    if row['source'] in BREEZ_BASE_SOURCES:
         base = (breez_base or {}).get(row.get('nc_code'))
         if base is not None:
             return base

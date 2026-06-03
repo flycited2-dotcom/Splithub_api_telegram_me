@@ -19,11 +19,13 @@
 - **Репозиторий сайта:** `github.com/flycited2-dotcom/split-shop_claude` (локально —
   `C:\Users\user\Documents\GitHub\B2B_split_breeze_v2`).
 - **Таблицы, которые читаем:** `catalog_product`, `stock_stock`, `stock_warehousestock`.
-- ⚠️ **Опт-цена Бриза — из Бриз API, не из БД:** в БД сайта у Бриза в `price_wholesale`
-  лежит розница (сайт пишет туда `ric`). Опт (base/закупку) Бриз отдаёт только в своём
-  API `/leftoversnew/`, поэтому сервис берёт её напрямую через `stock_report_bot/breez.py`
-  (по `nc_code`), а при сбое/без ключа мягко откатывается на цену из БД. Фикс сайта в
-  `sync_stock` для цены Бриза больше НЕ требуется. Ключ — `BREEZ_AUTH_HEADER` в `.env`.
+- ⚠️ **Опт-цена Бриза и Русклимата — из Бриз API, не из БД:** оба идут через фид Бриза
+  (NC-namespace Бриза), и в БД сайта у них в `price_wholesale` лежит розница (`ric`).
+  Опт (base/закупку) Бриз отдаёт только в своём API `/leftoversnew/`, поэтому сервис
+  берёт её напрямую через `stock_report_bot/breez.py` (по `nc_code`), а при сбое/без
+  ключа/если NC не в фиде мягко откатывается на цену из БД. Daichi — отдельный
+  дистрибьютор, его опт корректно лежит в `price_wholesale`. Ключ — `BREEZ_AUTH_HEADER`
+  в `.env`.
 
 ## Бизнес-правила отчёта (НЕ менять бездумно)
 
@@ -44,8 +46,9 @@
   сортировка/группировка по бренду. Полоски-разделители на всю ширину: тонкая
   (`report.ITEM_DIVIDER`) после каждой позиции, двойная (`report.BRAND_DIVIDER`)
   между брендами.
-- **Опт-цена:** Rusklimat/Daichi — `catalog_product.price_wholesale` из БД; Бриз — base
-  из Бриз API по `nc_code` (`breez.py`), с откатом на `price_wholesale`. См. `report._price_for`.
+- **Опт-цена:** Daichi — `catalog_product.price_wholesale` из БД; Бриз и Rusklimat —
+  base из Бриз API по `nc_code` (`breez.py`), с откатом на `price_wholesale`
+  (в БД у них розница). См. `report._price_for` / `report.BREEZ_BASE_SOURCES`.
 - Реализация: фильтр в `stock_report_bot/db.py` (Симферополь + категории + бренд);
   количество — `report._qty_for`, строка — `report._product_line`.
 

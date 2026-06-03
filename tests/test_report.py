@@ -50,17 +50,24 @@ class ReportTests(unittest.TestCase):
         text = '\n'.join(build_report_chunks(self.rows, today=date(2026, 6, 2)))
         self.assertNotIn('NoCrimea', text)
 
-    def test_breeze_price_from_breez_base_with_fallback(self):
+    def test_breez_base_for_breeze_and_rusklimat_with_fallback(self):
+        # Бриз и Русклимат идут через фид Бриза (NC-namespace Бриза): опт (base)
+        # берём из breez_base по nc_code, в БД у них розница. Откат на
+        # price_wholesale, если NC не найден. Daichi — всегда из БД.
         rows = [
-            _row('breeze', 'Inverter A', Decimal('41200'), 5, nc_code='НС-1', brand='Ballu'),  # есть в breez_base
-            _row('breeze', 'Inverter B', Decimal('39000'), 2, nc_code='НС-2', brand='Ballu'),  # нет → откат на БД
-            _row('rusklimat', 'Model X', Decimal('28500'), 3, nc_code='НС-1', brand='Hisense'),  # не Бриз → из БД
+            _row('breeze', 'Inverter A', Decimal('41200'), 5, nc_code='НС-1', brand='Ballu'),   # есть в breez_base
+            _row('breeze', 'Inverter B', Decimal('39000'), 2, nc_code='НС-2', brand='Ballu'),   # нет → откат на БД
+            _row('rusklimat', 'Berg-07', Decimal('19888'), 3, nc_code='НС-3', brand='SHUFT'),   # есть → base (а не розница)
+            _row('rusklimat', 'Berg-12', Decimal('28888'), 1, nc_code='НС-4', brand='SHUFT'),   # нет → откат на БД
+            _row('daichi', 'DA25', Decimal('33900'), 1, nc_code='НС-1', brand='Daichi'),        # daichi игнорирует breez_base
         ]
         text = '\n'.join(build_report_chunks(
-            rows, breez_base={'НС-1': 30000.0}, today=date(2026, 6, 2)))
-        self.assertIn('• <b>Ballu</b> Inverter A — 30 000 ₽ — 5 шт.', text)   # base из Бриз API
+            rows, breez_base={'НС-1': 30000.0, 'НС-3': 13722.72}, today=date(2026, 6, 2)))
+        self.assertIn('• <b>Ballu</b> Inverter A — 30 000 ₽ — 5 шт.', text)   # base из фида Бриза
         self.assertIn('• <b>Ballu</b> Inverter B — 39 000 ₽ — 2 шт.', text)   # откат на price_wholesale
-        self.assertIn('• <b>Hisense</b> Model X — 28 500 ₽ — 3 шт.', text)    # rusklimat игнорирует breez_base
+        self.assertIn('• <b>SHUFT</b> Berg-07 — 13 723 ₽ — 3 шт.', text)      # Русклимат: base из фида Бриза
+        self.assertIn('• <b>SHUFT</b> Berg-12 — 28 888 ₽ — 1 шт.', text)      # Русклимат без NC → откат на БД
+        self.assertIn('• <b>Daichi</b> DA25 — 33 900 ₽ — 1 шт.', text)        # Daichi всегда из БД (НС-1 игнор)
 
     def test_chunking_respects_max_len(self):
         chunks = build_report_chunks(self.rows, max_len=120)
