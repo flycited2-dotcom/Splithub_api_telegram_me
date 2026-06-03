@@ -28,7 +28,7 @@ def send_telegram(text, chat_id):
             f'{base}/bot{TELEGRAM_BOT_TOKEN}/sendMessage',
             data=payload,
             headers={'Content-Type': 'application/json; charset=utf-8'},
-            timeout=10,
+            timeout=30,   # на VPS через socat-прокси ответ иногда >10с
         )
         resp.raise_for_status()
         return True
