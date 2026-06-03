@@ -10,8 +10,10 @@ SUPPLIER_EMOJI = {'rusklimat': '🟦', 'daichi': '🟥', 'breeze': '🟩'}
 # Поставщик, у которого опт-цена (base) берётся из Бриз API, а не из БД.
 BREEZE_SOURCE = 'breeze'
 
-# Полоска-разделитель между брендами (как в боте заказов — удобно читать).
-DIVIDER = '━━━━━━━━━━━━'
+# Полоски-разделители на всю ширину сообщения: тонкая — после каждой позиции,
+# двойная — между брендами. Как в боте заказов: так удобнее ориентироваться.
+ITEM_DIVIDER = '─' * 26
+BRAND_DIVIDER = '═' * 26
 
 
 def _supplier_label(source):
@@ -88,13 +90,12 @@ def build_report_chunks(rows, breez_base=None, today=None, max_len=3900):
     lines = header_lines + ['']
     for source, group in groupby(rows, key=lambda r: r['source']):
         lines.append(_supplier_header(source))
-        prev_brand = None
-        for r in group:
-            brand = r.get('brand') or ''
-            if prev_brand is not None and brand != prev_brand:
-                lines.append(DIVIDER)   # полоска между брендами
+        items = list(group)
+        for i, r in enumerate(items):
             lines.append(_product_line(r, breez_base))
-            prev_brand = brand
+            if i < len(items) - 1:   # после каждой позиции, кроме последней у поставщика
+                same_brand = (items[i + 1].get('brand') or '') == (r.get('brand') or '')
+                lines.append(ITEM_DIVIDER if same_brand else BRAND_DIVIDER)
         lines.append('')
 
     return _chunk_lines(lines, max_len)

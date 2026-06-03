@@ -6,7 +6,7 @@ from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from stock_report_bot.report import build_report_chunks, DIVIDER
+from stock_report_bot.report import build_report_chunks, ITEM_DIVIDER, BRAND_DIVIDER
 
 
 def _row(source, title, price, crimea, nc_code=None, brand=None):
@@ -20,6 +20,7 @@ class ReportTests(unittest.TestCase):
     def setUp(self):
         self.rows = [
             _row('rusklimat', 'AS-09HR4', Decimal('28500'), 3, brand='Hisense'),
+            _row('rusklimat', 'AS-12HR4', Decimal('31000'), 2, brand='Hisense'),
             _row('rusklimat', 'NoPrice', None, 2, brand='Royal Clima'),
             _row('daichi', 'DA25', Decimal('33900'), 1, brand='Daichi'),
             _row('breeze', 'BSWI-09', Decimal('41200'), 5, brand='Ballu'),
@@ -38,10 +39,12 @@ class ReportTests(unittest.TestCase):
         self.assertIn('• <b>Ballu</b> BSWI-09 — 41 200 ₽ — 5 шт.', text)
         self.assertIn('• <b>Royal Clima</b> NoPrice — — — 2 шт.', text)   # цена None → «—»
 
-    def test_divider_between_brands(self):
-        # У Русклимата два бренда (Hisense, Royal Clima) → между ними полоска.
+    def test_item_and_brand_dividers(self):
+        # Русклимат: между двумя Hisense — тонкая полоска, между Hisense и
+        # Royal Clima — двойная.
         text = '\n'.join(build_report_chunks(self.rows, today=date(2026, 6, 2)))
-        self.assertIn(DIVIDER, text)
+        self.assertIn(ITEM_DIVIDER, text)
+        self.assertIn(BRAND_DIVIDER, text)
 
     def test_no_crimea_stock_excluded(self):
         text = '\n'.join(build_report_chunks(self.rows, today=date(2026, 6, 2)))
