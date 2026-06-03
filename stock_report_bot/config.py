@@ -21,3 +21,9 @@ DB = {
 TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
 TELEGRAM_OWNER_CHAT_ID = config('TELEGRAM_OWNER_CHAT_ID', default='')
 TELEGRAM_API_URL = config('TELEGRAM_API_URL', default='https://api.telegram.org')
+
+# Бриз API — нужен ТОЛЬКО чтобы получить опт-цену (base) Бриза напрямую: в БД
+# сайта у Бриза лежит розница, а опт Бриз отдаёт лишь в своём API. Ключ — тот же,
+# что в /opt/oasis/.env сайта (BREEZ_AUTH_HEADER). Пусто → опт Бриза = цена из БД.
+BREEZ_BASE_URL = config('BREEZ_BASE_URL', default='https://api.breez.ru/v1/')
+BREEZ_AUTH_HEADER = config('BREEZ_AUTH_HEADER', default='')

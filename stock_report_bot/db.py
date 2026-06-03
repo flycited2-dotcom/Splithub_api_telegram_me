@@ -2,8 +2,9 @@
 
 Состав отчёта (бизнес-правило): «Крым для всех поставщиков + Бриз со всех
 складов». Количество: Бриз — сумма по всем складам, остальные — крымский остаток
-(`stock_stock.quantity` при `warehouse='Симферополь'`). Опт-цена — `price_wholesale`
-(для Бриза туда сайт кладёт base/закупку — см. фикс в sync_stock сайта).
+(`stock_stock.quantity` при `warehouse='Симферополь'`). Опт-цена для Rusklimat/Daichi
+— `price_wholesale` из БД; для Бриза опт (base) берётся напрямую из Бриз API
+(stock_report_bot/breez.py), т.к. в БД сайта у Бриза розница. Сайт не трогаем.
 """
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -12,6 +13,7 @@ from stock_report_bot.config import DB
 
 _QUERY = """
 SELECT p.source,
+       p.nc_code,
        p.title,
        p.price_wholesale,
        s.quantity AS crimea_qty,

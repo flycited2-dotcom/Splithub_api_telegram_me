@@ -9,10 +9,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from stock_report_bot.report import build_report_chunks
 
 
-def _row(source, title, price, crimea, total):
+def _row(source, title, price, crimea, total, nc_code=None):
     return {
         'source': source, 'title': title, 'price_wholesale': price,
-        'crimea_qty': crimea, 'total_qty': total,
+        'crimea_qty': crimea, 'total_qty': total, 'nc_code': nc_code,
     }
 
 
@@ -38,6 +38,18 @@ class ReportTests(unittest.TestCase):
         self.assertIn('Hisense AS-09HR4 — 28 500 ₽ — 3 шт.', text)   # РусКлимат — крымское
         self.assertIn('Breez Mainland — 15 000 ₽ — 30 шт.', text)     # Бриз — сумма складов
         self.assertIn('NoPrice — — — 2 шт.', text)                    # цена None → «—»
+
+    def test_breeze_price_from_breez_base_with_fallback(self):
+        rows = [
+            _row('breeze', 'Ballu A', Decimal('41200'), 5, 5, nc_code='НС-1'),   # есть в breez_base
+            _row('breeze', 'Ballu B', Decimal('39000'), 2, 2, nc_code='НС-2'),   # нет → откат на БД
+            _row('rusklimat', 'Hisense', Decimal('28500'), 3, 3, nc_code='НС-1'),  # не Бриз → из БД
+        ]
+        text = '\n'.join(build_report_chunks(
+            rows, breez_base={'НС-1': 30000.0}, today=date(2026, 6, 2)))
+        self.assertIn('Ballu A — 30 000 ₽ — 5 шт.', text)   # base из Бриз API, не 41 200
+        self.assertIn('Ballu B — 39 000 ₽ — 2 шт.', text)   # откат на price_wholesale
+        self.assertIn('Hisense — 28 500 ₽ — 3 шт.', text)   # rusklimat игнорирует breez_base
 
     def test_chunking_respects_max_len(self):
         chunks = build_report_chunks(self.rows, max_len=120)

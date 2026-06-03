@@ -19,10 +19,11 @@
 - **Репозиторий сайта:** `github.com/flycited2-dotcom/split-shop_claude` (локально —
   `C:\Users\user\Documents\GitHub\B2B_split_breeze_v2`).
 - **Таблицы, которые читаем:** `catalog_product`, `stock_stock`, `stock_warehousestock`.
-- ⚠️ **Опт-цена Бриза:** в сайте есть 1-строчный фикс в `apps/sync/tasks.py::sync_stock`
-  (пишет `base`/закупку в `price_wholesale` всегда). Без задеплоенного фикса у Бриза
-  в БД опт-цена = розничной, и сервис покажет неверную цену. Этот фикс должен быть в
-  проде сайта.
+- ⚠️ **Опт-цена Бриза — из Бриз API, не из БД:** в БД сайта у Бриза в `price_wholesale`
+  лежит розница (сайт пишет туда `ric`). Опт (base/закупку) Бриз отдаёт только в своём
+  API `/leftoversnew/`, поэтому сервис берёт её напрямую через `stock_report_bot/breez.py`
+  (по `nc_code`), а при сбое/без ключа мягко откатывается на цену из БД. Фикс сайта в
+  `sync_stock` для цены Бриза больше НЕ требуется. Ключ — `BREEZ_AUTH_HEADER` в `.env`.
 
 ## Бизнес-правила отчёта (НЕ менять бездумно)
 
@@ -32,7 +33,8 @@
   отчёт раздувается почти на весь каталог.
 - **Количество:** Бриз — сумма по всем складам; остальные — крымский остаток.
 - **Наименование:** `catalog_product.title` как есть (без артикула/НС-кода).
-- **Опт-цена:** `catalog_product.price_wholesale`.
+- **Опт-цена:** Rusklimat/Daichi — `catalog_product.price_wholesale` из БД; Бриз — base
+  из Бриз API по `nc_code` (`breez.py`), с откатом на `price_wholesale`. См. `report._price_for`.
 - Реализация: фильтр в `stock_report_bot/db.py` (SQL `s.warehouse='Симферополь' OR
   source='breeze'`, `total_qty>0`); количество — `report._qty_for`.
 
@@ -42,10 +44,12 @@
 stock_report_bot/
   config.py    — чтение .env (БД + Telegram), python-decouple
   db.py        — один SQL-запрос остатков к БД сайта (read-only)
+  breez.py     — опт-цена (base) Бриза напрямую из Бриз API; ЧИСТЫЙ _parse_leftovers
   report.py    — сборка текста: группировка/цена/чанкинг, ЧИСТЫЕ функции
   telegram.py  — send_telegram(text, chat_id); charset=utf-8 ОБЯЗАТЕЛЕН
   main.py      — точка входа: fetch → build → send
-tests/test_report.py   — unittest на чистом Python (без БД и сети)
+tests/test_report.py   — unittest логики отчёта (без БД и сети)
+tests/test_breez.py    — unittest парсинга Бриз API (без сети)
 docs/PLAN.md
 ```
 

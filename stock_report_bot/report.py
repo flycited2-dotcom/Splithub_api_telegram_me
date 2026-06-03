@@ -27,9 +27,20 @@ def _qty_for(row):
     return int(row['crimea_qty'] or 0)
 
 
-def _product_line(row):
+def _price_for(row, breez_base):
+    """Опт-цена. Бриз отдаёт опт (base) только в своём API — в БД сайта у него
+    розница. Поэтому для Бриза берём base по nc_code из breez_base; если его нет
+    (ключ не задан/ошибка) — откатываемся на price_wholesale из БД."""
+    if row['source'] == ALL_WAREHOUSES_SOURCE:
+        base = (breez_base or {}).get(row.get('nc_code'))
+        if base is not None:
+            return base
+    return row['price_wholesale']
+
+
+def _product_line(row, breez_base):
     name = html.escape(row['title'] or '')
-    return f'• {name} — {_fmt_price(row["price_wholesale"])} — {_qty_for(row)} шт.'
+    return f'• {name} — {_fmt_price(_price_for(row, breez_base))} — {_qty_for(row)} шт.'
 
 
 def _chunk_lines(lines, max_len):
@@ -48,8 +59,10 @@ def _chunk_lines(lines, max_len):
     return chunks
 
 
-def build_report_chunks(rows, today=None, max_len=3900):
-    """Список Telegram-сообщений (HTML) с остатками, сгруппированных по поставщику."""
+def build_report_chunks(rows, breez_base=None, today=None, max_len=3900):
+    """Список Telegram-сообщений (HTML) с остатками, сгруппированных по поставщику.
+    breez_base: {nc_code: base} опт-цен Бриза (из Бриз API); для остальных опт
+    берётся из price_wholesale БД."""
     today = today or date.today()
     header = f'📦 Остатки в наличии (Крым + материк Бриза) — {today.strftime("%d.%m.%Y")}'
 
@@ -61,7 +74,7 @@ def build_report_chunks(rows, today=None, max_len=3900):
     lines = [header, '']
     for source, group in groupby(rows, key=lambda r: r['source']):
         lines.append(f'<b>{html.escape(_supplier_label(source))}</b>')
-        lines.extend(_product_line(r) for r in group)
+        lines.extend(_product_line(r, breez_base) for r in group)
         lines.append('')
 
     return _chunk_lines(lines, max_len)
