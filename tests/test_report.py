@@ -9,10 +9,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from stock_report_bot.report import build_report_chunks, ITEM_DIVIDER, BRAND_DIVIDER
 
 
-def _row(source, title, price, crimea, nc_code=None, brand=None):
+def _row(source, title, price, crimea, nc_code=None, brand=None, price_base=None):
     return {
         'source': source, 'title': title, 'price_wholesale': price,
-        'crimea_qty': crimea, 'nc_code': nc_code, 'brand': brand,
+        'price_base': price_base, 'crimea_qty': crimea, 'nc_code': nc_code, 'brand': brand,
     }
 
 
@@ -50,24 +50,26 @@ class ReportTests(unittest.TestCase):
         text = '\n'.join(build_report_chunks(self.rows, today=date(2026, 6, 2)))
         self.assertNotIn('NoCrimea', text)
 
-    def test_breez_base_for_breeze_and_rusklimat_with_fallback(self):
-        # Бриз и Русклимат идут через фид Бриза (NC-namespace Бриза): опт (base)
-        # берём из breez_base по nc_code, в БД у них розница. Откат на
-        # price_wholesale, если NC не найден. Daichi — всегда из БД.
+    def test_price_source_per_supplier(self):
+        # Бриз: base из Бриз API по nc_code (в БД розница), откат на price_wholesale.
+        # Русклимат: опт из stock_stock.price_base (в price_wholesale розница), откат
+        # на price_wholesale, если price_base пуст. Daichi: всегда price_wholesale.
         rows = [
             _row('breeze', 'Inverter A', Decimal('41200'), 5, nc_code='НС-1', brand='Ballu'),   # есть в breez_base
             _row('breeze', 'Inverter B', Decimal('39000'), 2, nc_code='НС-2', brand='Ballu'),   # нет → откат на БД
-            _row('rusklimat', 'Berg-07', Decimal('19888'), 3, nc_code='НС-3', brand='SHUFT'),   # есть → base (а не розница)
-            _row('rusklimat', 'Berg-12', Decimal('28888'), 1, nc_code='НС-4', brand='SHUFT'),   # нет → откат на БД
-            _row('daichi', 'DA25', Decimal('33900'), 1, nc_code='НС-1', brand='Daichi'),        # daichi игнорирует breez_base
+            _row('rusklimat', 'Berg-07', Decimal('19888'), 3, nc_code='НС-3', brand='SHUFT',
+                 price_base=Decimal('13722.72')),                                               # опт из price_base
+            _row('rusklimat', 'NoBase', Decimal('25490'), 1, nc_code='НС-4', brand='AC ELECTRIC'),  # price_base None → розница
+            _row('daichi', 'DA25', Decimal('33900'), 1, nc_code='НС-1', brand='Daichi',
+                 price_base=Decimal('1')),                                                      # daichi игнорит base и price_base
         ]
         text = '\n'.join(build_report_chunks(
-            rows, breez_base={'НС-1': 30000.0, 'НС-3': 13722.72}, today=date(2026, 6, 2)))
-        self.assertIn('• <b>Ballu</b> Inverter A — 30 000 ₽ — 5 шт.', text)   # base из фида Бриза
-        self.assertIn('• <b>Ballu</b> Inverter B — 39 000 ₽ — 2 шт.', text)   # откат на price_wholesale
-        self.assertIn('• <b>SHUFT</b> Berg-07 — 13 723 ₽ — 3 шт.', text)      # Русклимат: base из фида Бриза
-        self.assertIn('• <b>SHUFT</b> Berg-12 — 28 888 ₽ — 1 шт.', text)      # Русклимат без NC → откат на БД
-        self.assertIn('• <b>Daichi</b> DA25 — 33 900 ₽ — 1 шт.', text)        # Daichi всегда из БД (НС-1 игнор)
+            rows, breez_base={'НС-1': 30000.0}, today=date(2026, 6, 2)))
+        self.assertIn('• <b>Ballu</b> Inverter A — 30 000 ₽ — 5 шт.', text)      # base из Бриз API
+        self.assertIn('• <b>Ballu</b> Inverter B — 39 000 ₽ — 2 шт.', text)      # откат на price_wholesale
+        self.assertIn('• <b>SHUFT</b> Berg-07 — 13 723 ₽ — 3 шт.', text)         # Русклимат: опт из price_base
+        self.assertIn('• <b>AC ELECTRIC</b> NoBase — 25 490 ₽ — 1 шт.', text)    # Русклимат без price_base → розница
+        self.assertIn('• <b>Daichi</b> DA25 — 33 900 ₽ — 1 шт.', text)           # Daichi всегда price_wholesale
 
     def test_chunking_respects_max_len(self):
         chunks = build_report_chunks(self.rows, max_len=120)

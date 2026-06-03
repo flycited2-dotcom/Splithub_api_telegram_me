@@ -19,13 +19,16 @@
 - **Репозиторий сайта:** `github.com/flycited2-dotcom/split-shop_claude` (локально —
   `C:\Users\user\Documents\GitHub\B2B_split_breeze_v2`).
 - **Таблицы, которые читаем:** `catalog_product`, `stock_stock`, `stock_warehousestock`.
-- ⚠️ **Опт-цена Бриза и Русклимата — из Бриз API, не из БД:** оба идут через фид Бриза
-  (NC-namespace Бриза), и в БД сайта у них в `price_wholesale` лежит розница (`ric`).
-  Опт (base/закупку) Бриз отдаёт только в своём API `/leftoversnew/`, поэтому сервис
-  берёт её напрямую через `stock_report_bot/breez.py` (по `nc_code`), а при сбое/без
-  ключа/если NC не в фиде мягко откатывается на цену из БД. Daichi — отдельный
-  дистрибьютор, его опт корректно лежит в `price_wholesale`. Ключ — `BREEZ_AUTH_HEADER`
-  в `.env`.
+- ⚠️ **Опт-цена — у каждого поставщика свой источник; в `price_wholesale` НЕ всегда опт:**
+  - **Бриз:** в БД у него `price_wholesale` = розница (`ric`). Опт (base/закупку) Бриз
+    отдаёт только в своём API `/leftoversnew/` — сервис берёт его напрямую через
+    `stock_report_bot/breez.py` (по `nc_code`), при сбое/без ключа откат на цену БД.
+    Ключ — `BREEZ_AUTH_HEADER` в `.env`. (Фид Бриза НЕ содержит NC Русклимата.)
+  - **Русклимат:** в `price_wholesale` тоже лежит розница (= `ric`), а настоящий опт
+    («Ваша цена» портала) — в `stock_stock.price_base` (per-warehouse). Сервис берёт
+    `price_base`, откат на `price_wholesale`, если пусто. (Проверено: `price_base`
+    совпадает с «Ваша цена» b2b.rusklimat.com, NC-коды совпадают.)
+  - **Daichi:** опт корректно лежит в `price_wholesale`.
 
 ## Бизнес-правила отчёта (НЕ менять бездумно)
 
@@ -46,9 +49,10 @@
   сортировка/группировка по бренду. Полоски-разделители на всю ширину: тонкая
   (`report.ITEM_DIVIDER`) после каждой позиции, двойная (`report.BRAND_DIVIDER`)
   между брендами.
-- **Опт-цена:** Daichi — `catalog_product.price_wholesale` из БД; Бриз и Rusklimat —
-  base из Бриз API по `nc_code` (`breez.py`), с откатом на `price_wholesale`
-  (в БД у них розница). См. `report._price_for` / `report.BREEZ_BASE_SOURCES`.
+- **Опт-цена:** Daichi — `catalog_product.price_wholesale` из БД; Бриз — base из Бриз
+  API по `nc_code` (`breez.py`); Rusklimat — `stock_stock.price_base` (в БД у Бриза и
+  Русклимата `price_wholesale` = розница), с откатом на `price_wholesale`. См.
+  `report._price_for`.
 - Реализация: фильтр в `stock_report_bot/db.py` (Симферополь + категории + бренд);
   количество — `report._qty_for`, строка — `report._product_line`.
 

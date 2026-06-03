@@ -13,10 +13,9 @@
 - `EXCLUDE_TITLE_PATTERNS` — добивают аксессуары с ошибочно проставленным btu
   (виброопоры «V40P»→40, охладитель воздуха, зимний комплект) и мультисплит.
 
-Опт-цена: Daichi — `price_wholesale` из БД; Бриз и Rusklimat идут через фид Бриза,
-у них в БД розница, поэтому опт (base) берём из Бриз API по nc_code
-(stock_report_bot/breez.py), с откатом на `price_wholesale`. Наименование — `title`
-+ бренд (`catalog_brand`).
+Опт-цена: Daichi — `price_wholesale` из БД; Бриз — base из Бриз API по nc_code
+(stock_report_bot/breez.py), в БД у него розница; Rusklimat — `stock_stock.price_base`
+(в БД `price_wholesale` = розница/ric). Наименование — `title` + бренд (`catalog_brand`).
 """
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -42,6 +41,7 @@ SELECT p.source,
        b.title AS brand,
        p.title,
        p.price_wholesale,
+       s.price_base,
        s.quantity AS crimea_qty
 FROM catalog_product p
 JOIN stock_stock s ON s.product_id = p.id
@@ -57,7 +57,7 @@ ORDER BY p.source, b.title NULLS LAST, p.title;
 
 
 def fetch_stock_rows():
-    """Список dict'ов: source, nc_code, brand, title, price_wholesale, crimea_qty."""
+    """Список dict'ов: source, nc_code, brand, title, price_wholesale, price_base, crimea_qty."""
     conn = psycopg2.connect(
         host=DB['host'], port=DB['port'], dbname=DB['dbname'],
         user=DB['user'], password=DB['password'],
