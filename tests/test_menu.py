@@ -1,0 +1,136 @@
+import os
+import sys
+import unittest
+from decimal import Decimal
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from stock_report_bot import menu
+
+
+def _row(source, title, price, crimea, brand=None, series=None, nc_code=None, price_base=None):
+    return {
+        'source': source, 'title': title, 'price_wholesale': price,
+        'price_base': price_base, 'crimea_qty': crimea, 'nc_code': nc_code,
+        'brand': brand, 'series': series,
+    }
+
+
+class SeriesOfTests(unittest.TestCase):
+    def test_uses_series_field_when_present(self):
+        r = _row('breeze', 'Ballu BSWI-09', Decimal('1'), 1, brand='Ballu', series='Olympio')
+        self.assertEqual(menu.series_of(r), 'Olympio')
+
+    def test_rusklimat_parsed_from_title(self):
+        cases = [
+            ('Сплит-система Ballu Olympio Edge BSO-07HN8_22Y комплект', 'Ballu', 'Olympio Edge'),
+            ('Сплит-система SHUFT Berg SFTO-07HN1_24Y комплект', 'SHUFT', 'Berg'),
+            ('Кондиционер мобильный Ballu Aura BPAC-07 CP/N1_24Y', 'Ballu', 'Aura'),
+            ('Сплит-система Royal Thermo Barocco RTB-09HN8_V2 комплект', 'Royal Thermo', 'Barocco'),
+        ]
+        for title, brand, expected in cases:
+            r = _row('rusklimat', title, Decimal('1'), 1, brand=brand, series='')
+            self.assertEqual(menu.series_of(r), expected, title)
+
+    def test_rusklimat_no_series_word(self):
+        r = _row('rusklimat', 'Сплит-система инверторного типа AC ELECTRIC ACEMI-07HN8 комплект',
+                 Decimal('1'), 1, brand='AC ELECTRIC', series='')
+        self.assertEqual(menu.series_of(r), menu.EMPTY_SERIES)
+
+
+class MarkedPriceTests(unittest.TestCase):
+    def test_rounds_up_to_90(self):
+        self.assertEqual(menu.marked_price(26404, 5), 27790)     # 27 724.2 → 27 790
+        self.assertEqual(menu.marked_price(Decimal('26404'), 5), 27790)
+        self.assertEqual(menu.marked_price(10000, 10), 11090)    # 11 000 → 11 090
+        self.assertEqual(menu.marked_price(9991, 1), 10190)      # 10 090.91 > …090 → …190
+
+    def test_none(self):
+        self.assertIsNone(menu.marked_price(None, 5))
+
+
+class HierarchyTests(unittest.TestCase):
+    def setUp(self):
+        self.rows = [
+            _row('daichi', 'Kentatsu Kanami KSGAA35', Decimal('1'), 3, brand='Kentatsu', series='Kanami'),
+            _row('daichi', 'Kentatsu Kanami KSGAA09', Decimal('1'), 2, brand='Kentatsu', series='Kanami'),
+            _row('daichi', 'Kentatsu Aska KSGA12', Decimal('1'), 1, brand='Kentatsu', series='Aska'),
+            _row('breeze', 'Ballu BSWI-09', Decimal('1'), 5, brand='Ballu', series='Olympio'),
+            _row('breeze', 'NoCrimea', Decimal('1'), 0, brand='Ballu', series='Olympio'),  # отфильтр.
+            _row('rusklimat', 'Сплит-система SHUFT Berg SFTO-07HN1 комплект', Decimal('1'), 1,
+                 brand='SHUFT', series=''),
+        ]
+
+    def test_suppliers_present_in_order(self):
+        self.assertEqual(menu.suppliers_present(self.rows), ['breeze', 'rusklimat', 'daichi'])
+
+    def test_brands_and_series(self):
+        self.assertEqual(menu.brands_for(self.rows, 'daichi'), ['Kentatsu'])
+        self.assertEqual(menu.series_for(self.rows, 'daichi', 'Kentatsu'), ['Aska', 'Kanami'])
+        self.assertEqual(menu.series_for(self.rows, 'rusklimat', 'SHUFT'), ['Berg'])
+
+    def test_positions_excludes_no_crimea(self):
+        pos = menu.positions_for(self.rows, 'breeze', 'Ballu', 'Olympio')
+        self.assertEqual(len(pos), 1)
+        self.assertEqual(pos[0]['title'], 'Ballu BSWI-09')
+
+
+class CallbackTests(unittest.TestCase):
+    def test_pack_unpack(self):
+        self.assertEqual(menu.cb_pack('g', 'b', 1, 2, 5), 'g|b|1|2|5')
+        self.assertEqual(menu.cb_unpack('g|b|1|2|5'), ['g', 'b', '1', '2', '5'])
+
+    def test_callback_data_short(self):
+        self.assertLess(len(menu.cb_pack('g', 'r', 99, 99, 10).encode()), 64)
+
+
+class KeyboardTests(unittest.TestCase):
+    def setUp(self):
+        self.rows = [
+            _row('daichi', 'Kentatsu Kanami KSGAA35', Decimal('1'), 3, brand='Kentatsu', series='Kanami'),
+            _row('breeze', 'Ballu BSWI-09', Decimal('1'), 5, brand='Ballu', series='Olympio'),
+        ]
+
+    def test_kb_suppliers(self):
+        kb = menu.kb_suppliers(self.rows)
+        datas = [b['callback_data'] for row in kb['inline_keyboard'] for b in row]
+        self.assertIn('b|b|0', datas)   # breeze
+        self.assertIn('b|d|0', datas)   # daichi
+
+    def test_kb_brands_has_back(self):
+        kb = menu.kb_brands(self.rows, 'daichi')
+        flat = [b for row in kb['inline_keyboard'] for b in row]
+        self.assertTrue(any(b['callback_data'] == 's|d|0|0' for b in flat))  # бренд[0]→серии
+        self.assertTrue(any(b['callback_data'] == 'm' for b in flat))        # назад в корень
+
+    def test_kb_markup_ten_buttons(self):
+        kb = menu.kb_markup('daichi', 0, 0)
+        datas = [b['callback_data'] for row in kb['inline_keyboard'] for b in row
+                 if b['callback_data'].startswith('g|')]
+        self.assertEqual(len(datas), 10)
+        self.assertIn('g|d|0|0|5', datas)
+
+    def test_pagination(self):
+        rows = [_row('breeze', f'Br{i} M', Decimal('1'), 1, brand=f'Br{i:02d}', series='S')
+                for i in range(20)]
+        kb = menu.kb_brands(rows, 'breeze', page=0)
+        # 8 пунктов + ряд навигации + назад
+        item_btns = [b for row in kb['inline_keyboard'] for b in row
+                     if b['callback_data'].startswith('s|')]
+        self.assertEqual(len(item_btns), menu.PAGE_SIZE)
+        nav = [b['callback_data'] for row in kb['inline_keyboard'] for b in row]
+        self.assertTrue(any(d.startswith('b|b|1') for d in nav))  # ▶ на стр.1
+
+
+class BuildMessageTests(unittest.TestCase):
+    def test_priced_line(self):
+        rows = [_row('daichi', 'Kentatsu Kanami KSGAA35', Decimal('26404'), 12,
+                     brand='Kentatsu', series='Kanami')]
+        chunks = menu.build_priced_message(rows, 'daichi', 'Kentatsu', 'Kanami', 5)
+        text = '\n'.join(chunks)
+        self.assertIn('наценка <b>+5%</b>', text)
+        self.assertIn('• <b>Kentatsu</b> Kentatsu Kanami KSGAA35 — 27 790 ₽ — 12 шт.', text)
+
+
+if __name__ == '__main__':
+    unittest.main()

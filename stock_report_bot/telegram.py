@@ -49,3 +49,64 @@ def send_telegram(text, chat_id, retries=4, timeout=30):
                 time.sleep(3)
     logger.error('Telegram send окончательно не удалось после %d попыток', retries)
     return False
+
+
+# ── интерактивный режим (long-polling + кнопки) ────────────────────────────
+# Те же требования VPS: charset=utf-8, keep-alive Session, ретраи. Используются
+# ботом меню (stock_report_bot.bot); суточный отчёт их не задействует.
+def _api_url(method):
+    return f'{TELEGRAM_API_URL.rstrip("/")}/bot{TELEGRAM_BOT_TOKEN}/{method}'
+
+
+def _post(method, payload, timeout=30, retries=3):
+    """POST к Bot API с charset=utf-8 и ретраями. Возвращает result или None."""
+    if not TELEGRAM_BOT_TOKEN:
+        return None
+    body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+    for attempt in range(1, retries + 1):
+        try:
+            resp = _session.post(
+                _api_url(method), data=body,
+                headers={'Content-Type': 'application/json; charset=utf-8'},
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            return resp.json().get('result')
+        except Exception as exc:
+            logger.warning('Telegram %s попытка %d/%d: %s', method, attempt, retries, exc)
+            if attempt < retries:
+                time.sleep(2)
+    return None
+
+
+def get_updates(offset=None, timeout=25):
+    """Long-poll getUpdates. Возвращает список updates (или [])."""
+    payload = {'timeout': timeout, 'allowed_updates': ['message', 'callback_query']}
+    if offset is not None:
+        payload['offset'] = offset
+    # HTTP-timeout должен быть больше long-poll timeout.
+    result = _post('getUpdates', payload, timeout=timeout + 15, retries=1)
+    return result or []
+
+
+def send_message(chat_id, text, reply_markup=None):
+    payload = {'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML',
+               'disable_web_page_preview': True}
+    if reply_markup is not None:
+        payload['reply_markup'] = reply_markup
+    return _post('sendMessage', payload)
+
+
+def edit_message_text(chat_id, message_id, text, reply_markup=None):
+    payload = {'chat_id': chat_id, 'message_id': message_id, 'text': text,
+               'parse_mode': 'HTML', 'disable_web_page_preview': True}
+    if reply_markup is not None:
+        payload['reply_markup'] = reply_markup
+    return _post('editMessageText', payload)
+
+
+def answer_callback_query(callback_query_id, text=None):
+    payload = {'callback_query_id': callback_query_id}
+    if text:
+        payload['text'] = text
+    return _post('answerCallbackQuery', payload)

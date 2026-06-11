@@ -40,6 +40,7 @@ SELECT p.source,
        p.nc_code,
        b.title AS brand,
        p.title,
+       p.series,
        p.price_wholesale,
        s.price_base,
        s.quantity AS crimea_qty
@@ -57,7 +58,9 @@ ORDER BY p.source, b.title NULLS LAST, p.title;
 
 
 def fetch_stock_rows():
-    """Список dict'ов: source, nc_code, brand, title, price_wholesale, price_base, crimea_qty."""
+    """Список dict'ов: source, nc_code, brand, title, series, price_wholesale, price_base, crimea_qty.
+
+    `series` нужен интерактивному меню (`menu.series_of`); для отчёта не используется."""
     conn = psycopg2.connect(
         host=DB['host'], port=DB['port'], dbname=DB['dbname'],
         user=DB['user'], password=DB['password'],
