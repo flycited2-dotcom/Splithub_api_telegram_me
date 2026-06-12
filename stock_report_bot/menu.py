@@ -21,7 +21,8 @@ SUPPLIER_ORDER = ['breeze', 'rusklimat', 'daichi']
 SRC_CODE = {'breeze': 'b', 'rusklimat': 'r', 'daichi': 'd'}
 CODE_SRC = {v: k for k, v in SRC_CODE.items()}
 
-MARKUP_PCTS = list(range(1, 11))   # 10 кнопок 1..10 %
+MARKUP_PCTS = list(range(1, 11))   # наценка к опту: +1..+10 %
+DISCOUNT_PCTS = [-1, -3, -5, -7]   # регрессивная (скидка от опта): −1/−3/−5/−7 %
 PAGE_SIZE = 8                      # кнопок-пунктов на страницу (пагинация брендов/серий)
 
 EMPTY_SERIES = '(без серии)'
@@ -160,12 +161,18 @@ def kb_series(rows, source, brand_idx, page=0):
                      page_cb=lambda p: cb_pack('s', code, brand_idx, p))
 
 
+def _pct_btn(code, brand_idx, series_idx, p):
+    sign = '+' if p > 0 else '−'   # callback хранит знак ASCII ('-5'), отображаем '−5%'
+    return _btn(f'{sign}{abs(p)}%', cb_pack('g', code, brand_idx, series_idx, p))
+
+
 def kb_markup(source, brand_idx, series_idx):
     code = SRC_CODE[source]
-    row1 = [_btn(f'+{p}%', cb_pack('g', code, brand_idx, series_idx, p)) for p in MARKUP_PCTS[:5]]
-    row2 = [_btn(f'+{p}%', cb_pack('g', code, brand_idx, series_idx, p)) for p in MARKUP_PCTS[5:]]
+    disc = [_pct_btn(code, brand_idx, series_idx, p) for p in DISCOUNT_PCTS]      # −1/−3/−5/−7
+    row1 = [_pct_btn(code, brand_idx, series_idx, p) for p in MARKUP_PCTS[:5]]    # +1..+5
+    row2 = [_pct_btn(code, brand_idx, series_idx, p) for p in MARKUP_PCTS[5:]]    # +6..+10
     back = [_btn('⬅ Назад', cb_pack('s', code, brand_idx, 0))]
-    return _kb([row1, row2, back])
+    return _kb([disc, row1, row2, back])
 
 
 # ── текст уровней навигации ────────────────────────────────────────────────
@@ -184,15 +191,17 @@ def text_series(source, brand):
 
 def text_markup(source, brand, series):
     return (f'<b>{html.escape(brand)}</b> · {html.escape(series)}\n'
-            f'Выберите наценку к опт-цене:')
+            f'Наценка (+) или скидка (−) к опт-цене:')
 
 
 # ── итоговый список с наценкой ─────────────────────────────────────────────
 def build_priced_message(rows, source, brand, series, pct, breez_base=None):
-    """Текст сообщения со списком позиций серии в наличии: опт × (1+pct%) → …90."""
+    """Текст сообщения со списком позиций серии в наличии: опт × (1+pct%) → …90.
+
+    Шапка — только 2 эмодзи (🏷 + квадрат поставщика): сообщение готово к пересылке
+    клиенту, поставщик и величина наценки/скидки в нём НЕ раскрываются."""
     emoji = SUPPLIER_EMOJI.get(source, '▫️')
-    head = (f'🏷 {emoji} <b>{html.escape(_supplier_label(source))}</b> · '
-            f'{html.escape(brand)} · {html.escape(series)} · наценка <b>+{pct}%</b>')
+    head = f'🏷 {emoji}'
     lines = [head, '']
     items = positions_for(rows, source, brand, series)
     for r in items:

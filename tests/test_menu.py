@@ -45,6 +45,10 @@ class MarkedPriceTests(unittest.TestCase):
         self.assertEqual(menu.marked_price(10000, 10), 11090)    # 11 000 → 11 090
         self.assertEqual(menu.marked_price(9991, 1), 10190)      # 10 090.91 > …090 → …190
 
+    def test_negative_markup_discount(self):
+        # −5% от опта 26 404 = 25 083.8 → округл. вверх до …90 = 25 090
+        self.assertEqual(menu.marked_price(26404, -5), 25090)
+
     def test_none(self):
         self.assertIsNone(menu.marked_price(None, 5))
 
@@ -103,12 +107,14 @@ class KeyboardTests(unittest.TestCase):
         self.assertTrue(any(b['callback_data'] == 's|d|0|0' for b in flat))  # бренд[0]→серии
         self.assertTrue(any(b['callback_data'] == 'm' for b in flat))        # назад в корень
 
-    def test_kb_markup_ten_buttons(self):
+    def test_kb_markup_buttons(self):
         kb = menu.kb_markup('daichi', 0, 0)
         datas = [b['callback_data'] for row in kb['inline_keyboard'] for b in row
                  if b['callback_data'].startswith('g|')]
-        self.assertEqual(len(datas), 10)
-        self.assertIn('g|d|0|0|5', datas)
+        self.assertEqual(len(datas), 14)        # 4 скидки + 10 наценок
+        self.assertIn('g|d|0|0|5', datas)       # +5%
+        self.assertIn('g|d|0|0|-5', datas)      # −5% (скидка от опта)
+        self.assertIn('g|d|0|0|-1', datas)
 
     def test_pagination(self):
         rows = [_row('breeze', f'Br{i} M', Decimal('1'), 1, brand=f'Br{i:02d}', series='S')
@@ -126,10 +132,17 @@ class BuildMessageTests(unittest.TestCase):
     def test_priced_line(self):
         rows = [_row('daichi', 'Kentatsu Kanami KSGAA35', Decimal('26404'), 12,
                      brand='Kentatsu', series='Kanami')]
-        chunks = menu.build_priced_message(rows, 'daichi', 'Kentatsu', 'Kanami', 5)
-        text = '\n'.join(chunks)
-        self.assertIn('наценка <b>+5%</b>', text)
+        text = '\n'.join(menu.build_priced_message(rows, 'daichi', 'Kentatsu', 'Kanami', 5))
+        self.assertTrue(text.startswith('🏷 🟥'))    # шапка — только эмодзи
+        self.assertNotIn('наценка', text)            # наценку клиенту не раскрываем
+        self.assertNotIn('Daichi', text)             # поставщика не раскрываем
         self.assertIn('• <b>Kentatsu</b> Kentatsu Kanami KSGAA35 — 27 790 ₽ — 12 шт.', text)
+
+    def test_negative_priced_line(self):
+        rows = [_row('daichi', 'Kentatsu Kanami KSGAA35', Decimal('26404'), 12,
+                     brand='Kentatsu', series='Kanami')]
+        text = '\n'.join(menu.build_priced_message(rows, 'daichi', 'Kentatsu', 'Kanami', -5))
+        self.assertIn('— 25 090 ₽ — 12 шт.', text)   # −5% от опта
 
 
 if __name__ == '__main__':
