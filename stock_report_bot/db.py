@@ -43,7 +43,9 @@ SELECT p.source,
        p.series,
        p.price_wholesale,
        s.price_base,
-       s.quantity AS crimea_qty
+       s.quantity AS crimea_qty,
+       (SELECT i.url FROM catalog_productimage i
+        WHERE i.product_id = p.id ORDER BY i."order" LIMIT 1) AS image_url
 FROM catalog_product p
 JOIN stock_stock s ON s.product_id = p.id
 LEFT JOIN catalog_brand b ON b.id = p.brand_id
@@ -58,9 +60,11 @@ ORDER BY p.source, b.title NULLS LAST, p.title;
 
 
 def fetch_stock_rows():
-    """Список dict'ов: source, nc_code, brand, title, series, price_wholesale, price_base, crimea_qty.
+    """Список dict'ов: source, nc_code, brand, title, series, price_wholesale, price_base,
+    crimea_qty, image_url.
 
-    `series` нужен интерактивному меню (`menu.series_of`); для отчёта не используется."""
+    `series`/`image_url` нужны интерактивному меню (`menu`); отчёт их не использует.
+    `image_url` — URL первого фото товара (order=0, обычно внутренний блок)."""
     conn = psycopg2.connect(
         host=DB['host'], port=DB['port'], dbname=DB['dbname'],
         user=DB['user'], password=DB['password'],

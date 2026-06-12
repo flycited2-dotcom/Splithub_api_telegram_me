@@ -84,6 +84,16 @@ def positions_for(rows, source, brand, series):
     return sorted(items, key=lambda r: (r.get('title') or ''))
 
 
+def series_image(rows, source, brand, series):
+    """URL фото для серии — первое непустое `image_url` среди позиций (order=0,
+    обычно внутренний блок). None, если ни у одной позиции картинки нет."""
+    for r in positions_for(rows, source, brand, series):
+        url = (r.get('image_url') or '').strip()
+        if url:
+            return url
+    return None
+
+
 # ── наценка ────────────────────────────────────────────────────────────────
 def marked_price(opt, pct):
     """Опт + наценка, округление ВВЕРХ до ближайшего числа, оканчивающегося на …90.

@@ -16,7 +16,7 @@ from stock_report_bot.breez import fetch_breez_base_by_nc
 from stock_report_bot.db import fetch_stock_rows
 from stock_report_bot import menu
 from stock_report_bot.telegram import (
-    answer_callback_query, edit_message_text, get_updates, send_message,
+    answer_callback_query, edit_message_text, get_updates, send_message, send_photo,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -59,6 +59,22 @@ def _resolve(rows, code, brand_idx=None, series_idx=None):
     return source, brand, series
 
 
+def _send_result(chat_id, chunks, image_url):
+    """Итог: фото внутреннего блока + список-подпись снизу (для пересылки клиенту).
+    Подпись Telegram ≤ 1024 — если первый кусок влезает, шлём его подписью к фото,
+    остальное (редко) текстом; если длинный — фото с мин. подписью + список текстом.
+    Картинки нет / Telegram не смог её забрать → откат на только текст."""
+    if image_url:
+        cap = chunks[0] if len(chunks[0]) <= 1024 else '🏷'
+        if send_photo(chat_id, image_url, caption=cap):
+            rest = chunks[1:] if cap == chunks[0] else chunks
+            for chunk in rest:
+                send_message(chat_id, chunk)
+            return
+    for chunk in chunks:
+        send_message(chat_id, chunk)
+
+
 def _handle_callback(cb):
     cq_id = cb['id']
     from_id = cb.get('from', {}).get('id')
@@ -96,8 +112,9 @@ def _handle_callback(cb):
             code, bidx, sidx, pct = parts[1], int(parts[2]), int(parts[3]), int(parts[4])
             source, brand, series = _resolve(rows, code, bidx, sidx)
             breez_base = _breez_base() if source == 'breeze' else None
-            for chunk in menu.build_priced_message(rows, source, brand, series, pct, breez_base):
-                send_message(chat_id, chunk)
+            chunks = menu.build_priced_message(rows, source, brand, series, pct, breez_base)
+            image_url = menu.series_image(rows, source, brand, series)
+            _send_result(chat_id, chunks, image_url)
         answer_callback_query(cq_id)
     except (IndexError, KeyError, ValueError):
         logger.warning('callback устарел/битый: %s', data)

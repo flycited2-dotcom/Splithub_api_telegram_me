@@ -8,11 +8,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from stock_report_bot import menu
 
 
-def _row(source, title, price, crimea, brand=None, series=None, nc_code=None, price_base=None):
+def _row(source, title, price, crimea, brand=None, series=None, nc_code=None,
+         price_base=None, image_url=None):
     return {
         'source': source, 'title': title, 'price_wholesale': price,
         'price_base': price_base, 'crimea_qty': crimea, 'nc_code': nc_code,
-        'brand': brand, 'series': series,
+        'brand': brand, 'series': series, 'image_url': image_url,
     }
 
 
@@ -77,6 +78,15 @@ class HierarchyTests(unittest.TestCase):
         pos = menu.positions_for(self.rows, 'breeze', 'Ballu', 'Olympio')
         self.assertEqual(len(pos), 1)
         self.assertEqual(pos[0]['title'], 'Ballu BSWI-09')
+
+    def test_series_image_first_nonempty(self):
+        rows = [
+            _row('daichi', 'Kentatsu A', Decimal('1'), 1, brand='Kentatsu', series='Kanami', image_url=None),
+            _row('daichi', 'Kentatsu B', Decimal('1'), 1, brand='Kentatsu', series='Kanami',
+                 image_url='https://x/img.jpg'),
+        ]
+        self.assertEqual(menu.series_image(rows, 'daichi', 'Kentatsu', 'Kanami'), 'https://x/img.jpg')
+        self.assertIsNone(menu.series_image(rows, 'daichi', 'Kentatsu', 'Нет'))
 
 
 class CallbackTests(unittest.TestCase):

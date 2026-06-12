@@ -110,3 +110,13 @@ def answer_callback_query(callback_query_id, text=None):
     if text:
         payload['text'] = text
     return _post('answerCallbackQuery', payload)
+
+
+def send_photo(chat_id, photo, caption=None):
+    """sendPhoto по URL (картинку забирает сам Telegram). caption ≤ 1024 символов,
+    HTML. None, если не удалось (URL недоступен Telegram) — caller откатывается на текст."""
+    payload = {'chat_id': chat_id, 'photo': photo}
+    if caption:
+        payload['caption'] = caption
+        payload['parse_mode'] = 'HTML'
+    return _post('sendPhoto', payload)
