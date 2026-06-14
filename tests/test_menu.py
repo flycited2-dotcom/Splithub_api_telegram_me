@@ -183,5 +183,27 @@ class ReplyKeyboardTests(unittest.TestCase):
         self.assertIn(menu.MENU_BUTTON_TEXT, texts)
 
 
+class ShortSeriesTests(unittest.TestCase):
+    def test_strips_breez_prefix(self):
+        self.assertEqual(
+            menu.short_series('Инверторные сплит-системы серии CYCLONE DC Inverter'),
+            'CYCLONE DC Inverter')
+        self.assertEqual(menu.short_series('Классические сплит-системы серии PROGRESS'), 'PROGRESS')
+        self.assertEqual(
+            menu.short_series('Классические сплит-системы кассетного типа серии KADET'), 'KADET')
+
+    def test_keeps_names_without_prefix(self):
+        self.assertEqual(menu.short_series('AKOYA Inverter'), 'AKOYA Inverter')
+        self.assertEqual(menu.short_series('Breezeless E'), 'Breezeless E')
+        self.assertEqual(menu.short_series('Olympio Edge'), 'Olympio Edge')
+
+    def test_kb_series_uses_short_label(self):
+        full = 'Инверторные сплит-системы серии CYCLONE DC Inverter'
+        rows = [_row('breeze', 'X model', Decimal('1'), 1, brand='ZILON', series=full)]
+        texts = [b['text'] for row in menu.kb_series(rows, 'breeze', 0)['inline_keyboard'] for b in row]
+        self.assertIn('CYCLONE DC Inverter', texts)
+        self.assertNotIn(full, texts)
+
+
 if __name__ == '__main__':
     unittest.main()

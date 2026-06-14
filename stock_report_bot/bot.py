@@ -138,7 +138,8 @@ def _handle_callback(cb):
                     utp_map = _breez_utp()
                     utp_raw = next((utp_map.get(nc) for nc in nc_codes if utp_map.get(nc)), None)
                 extra_block = specs.build_specs_block(
-                    fetch_tech_values(nc_codes), brand, series, source, utp_raw, titles)
+                    fetch_tech_values(nc_codes), brand, menu.short_series(series),
+                    source, utp_raw, titles)
             chunks = menu.build_priced_message(rows, source, brand, series, pct, breez_base, extra_block)
             image_url = menu.series_image(rows, source, brand, series)
             _send_result(chat_id, chunks, image_url)

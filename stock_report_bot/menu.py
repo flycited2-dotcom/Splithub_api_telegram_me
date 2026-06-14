@@ -11,6 +11,7 @@ callback_data компактный, без внешнего стора (пере
 пере-выводимых из снапшота остатков при каждом нажатии. Действие — первое поле.
 """
 import html
+import re
 
 from stock_report_bot.report import (
     SUPPLIER_EMOJI, _chunk_lines, _fmt_price, _price_for, _qty_for, _supplier_label,
@@ -55,6 +56,24 @@ def series_of(row):
             break
         words.append(w)
     return ' '.join(words).strip() or EMPTY_SERIES
+
+
+# Бриз отдаёт многословные имена серий: «Инверторные сплит-системы серии CYCLONE DC
+# Inverter». В кнопке/заголовке показываем только саму серию (часть после «серии …»),
+# иначе имя не влезает и обрезается. Идентичность серии (группировка/индексы в callback) —
+# по-прежнему полная; это ТОЛЬКО про отображение.
+_SERIES_PREFIX_RE = re.compile(r'^.*?\bсери[ия]\s+', re.I)
+
+
+def short_series(name):
+    """Короткое имя серии для показа: срезает префикс «… сплит-системы серии »."""
+    s = (name or '').strip()
+    m = _SERIES_PREFIX_RE.match(s)
+    if m:
+        tail = s[m.end():].strip()
+        if tail:
+            return tail
+    return s
 
 
 # ── срезы иерархии (детерминированно отсортированы) ─────────────────────────
@@ -173,7 +192,7 @@ def kb_series(rows, source, brand_idx, page=0):
     brands = brands_for(rows, source)
     brand = brands[brand_idx]
     series = series_for(rows, source, brand)
-    items = [(s, cb_pack('k', code, brand_idx, i)) for i, s in enumerate(series)]
+    items = [(short_series(s), cb_pack('k', code, brand_idx, i)) for i, s in enumerate(series)]
     return _paginate(items, page, nav_back_data=cb_pack('b', code, 0),
                      page_cb=lambda p: cb_pack('s', code, brand_idx, p))
 
@@ -218,13 +237,13 @@ def text_series(source, brand):
 
 
 def text_markup(source, brand, series):
-    return (f'<b>{html.escape(brand)}</b> · {html.escape(series)}\n'
+    return (f'<b>{html.escape(brand)}</b> · {html.escape(short_series(series))}\n'
             f'Наценка (+) или скидка (−) к опт-цене:')
 
 
 def text_specs_choice(brand, series, pct):
     sign = '+' if pct > 0 else '−'
-    return (f'<b>{html.escape(brand)}</b> · {html.escape(series)}  ({sign}{abs(pct)}%)\n'
+    return (f'<b>{html.escape(brand)}</b> · {html.escape(short_series(series))}  ({sign}{abs(pct)}%)\n'
             f'Прислать итог с характеристиками?')
 
 
