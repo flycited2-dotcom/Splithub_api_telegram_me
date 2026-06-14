@@ -16,7 +16,7 @@ log = logging.getLogger('stock_report_bot.fotogen_bridge')
 _TIMEOUT = 20   # сек на скачивание фото и на отправку задачи
 
 
-def submit_card(photo_url, brand, model, specs_lines, chat_id):
+def submit_card(photo_url, brand, model, specs_lines, chat_id, caption=''):
     """Поставить задачу генерации карточки в фотоген-агент.
 
     Args:
@@ -25,6 +25,8 @@ def submit_card(photo_url, brand, model, specs_lines, chat_id):
         model:       Серия/модель (короткое имя, напр. «WindFree»)
         specs_lines: Список строк-преимуществ для {{SPECS}} промпта (plain text)
         chat_id:     Telegram chat_id владельца — куда фотоген отправит результат
+        caption:     Готовая HTML-подпись-прайс для публикации в канал (фотоген хранит
+                     её и ставит подписью к фото при «Опубликовать»). Пусто — без подписи.
 
     Returns:
         (True, 'ok') при успехе; (False, 'текст ошибки') при сбое. В сеть не ходит,
@@ -58,6 +60,7 @@ def submit_card(photo_url, brand, model, specs_lines, chat_id):
                 'brand': brand or '',
                 'model': model or '',
                 'chat_id': str(chat_id),
+                'caption': caption or '',
             },
             files={'photo': (fname, io.BytesIO(photo_bytes), 'image/jpeg')},
             timeout=_TIMEOUT,

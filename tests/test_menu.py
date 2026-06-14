@@ -166,11 +166,12 @@ class BuildMessageTests(unittest.TestCase):
 
 
 class SpecsChoiceTests(unittest.TestCase):
-    def test_two_buttons_and_back(self):
+    def test_buttons_and_back(self):
         kb = menu.kb_specs_choice('breeze', 1, 2, 5)
         datas = [b['callback_data'] for row in kb['inline_keyboard'] for b in row]
         self.assertIn('gs|b|1|2|5', datas)   # с характеристиками
         self.assertIn('gp|b|1|2|5', datas)   # без характеристик
+        self.assertIn('c|b|1|2|5', datas)    # 🎨 карточка для канала (с наценкой 5%)
         self.assertIn('k|b|1|2', datas)      # ⬅ назад к выбору наценки
 
 

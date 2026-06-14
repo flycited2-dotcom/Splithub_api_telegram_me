@@ -41,6 +41,7 @@ SELECT p.source,
        b.title AS brand,
        p.title,
        p.series,
+       p.btu_calc,
        p.price_wholesale,
        s.price_base,
        s.quantity AS crimea_qty,
@@ -60,11 +61,12 @@ ORDER BY p.source, b.title NULLS LAST, p.title;
 
 
 def fetch_stock_rows():
-    """Список dict'ов: source, nc_code, brand, title, series, price_wholesale, price_base,
-    crimea_qty, image_url.
+    """Список dict'ов: source, nc_code, brand, title, series, btu_calc, price_wholesale,
+    price_base, crimea_qty, image_url.
 
-    `series`/`image_url` нужны интерактивному меню (`menu`); отчёт их не использует.
-    `image_url` — URL первого фото товара (order=0, обычно внутренний блок)."""
+    `series`/`image_url`/`btu_calc` нужны интерактивному меню (`menu`); отчёт их не
+    использует. `btu_calc` — мощность охлаждения (для типоразмера 7/9/12/18/24 в подписи
+    карточки канала). `image_url` — URL первого фото товара (order=0, обычно внутр. блок)."""
     conn = psycopg2.connect(
         host=DB['host'], port=DB['port'], dbname=DB['dbname'],
         user=DB['user'], password=DB['password'],

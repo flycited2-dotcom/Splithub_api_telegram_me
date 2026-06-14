@@ -207,18 +207,19 @@ def kb_markup(source, brand_idx, series_idx):
     disc = [_pct_btn(code, brand_idx, series_idx, p) for p in DISCOUNT_PCTS]      # −1/−3/−5/−7
     row1 = [_pct_btn(code, brand_idx, series_idx, p) for p in MARKUP_PCTS[:5]]    # +1..+5
     row2 = [_pct_btn(code, brand_idx, series_idx, p) for p in MARKUP_PCTS[5:]]    # +6..+10
-    card = [_btn('🎨 Создать карточку для канала', cb_pack('c', code, brand_idx, series_idx))]
     back = [_btn('⬅ Назад', cb_pack('s', code, brand_idx, 0))]
-    return _kb([disc, row1, row2, card, back])
+    return _kb([disc, row1, row2, back])
 
 
 def kb_specs_choice(source, brand_idx, series_idx, pct):
-    """После выбора % — две кнопки: прислать итог С характеристиками (`gs|…`) или
-    БЕЗ (`gp|…`). Характеристики (если выбраны) прилетают одним сообщением с фото/списком."""
+    """После выбора % — итог С характеристиками (`gs|…`) / БЕЗ (`gp|…`), либо создать
+    карточку для канала (`c|…|pct` — цена в подписи по выбранной наценке).
+    Характеристики (если выбраны) прилетают одним сообщением с фото/списком."""
     code = SRC_CODE[source]
     return _kb([
         [_btn('✅ С характеристиками', cb_pack('gs', code, brand_idx, series_idx, pct))],
         [_btn('📄 Без характеристик', cb_pack('gp', code, brand_idx, series_idx, pct))],
+        [_btn('🎨 Создать карточку для канала', cb_pack('c', code, brand_idx, series_idx, pct))],
         [_btn('⬅ Назад', cb_pack('k', code, brand_idx, series_idx))],
     ])
 
