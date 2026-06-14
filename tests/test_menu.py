@@ -174,5 +174,14 @@ class SpecsChoiceTests(unittest.TestCase):
         self.assertIn('k|b|1|2', datas)      # ⬅ назад к выбору наценки
 
 
+class ReplyKeyboardTests(unittest.TestCase):
+    def test_main_reply_kb_persistent_menu_button(self):
+        kb = menu.MAIN_REPLY_KB
+        self.assertTrue(kb.get('is_persistent'))
+        self.assertTrue(kb.get('resize_keyboard'))
+        texts = [b['text'] for row in kb['keyboard'] for b in row]
+        self.assertIn(menu.MENU_BUTTON_TEXT, texts)
+
+
 if __name__ == '__main__':
     unittest.main()

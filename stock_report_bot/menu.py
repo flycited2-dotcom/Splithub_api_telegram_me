@@ -145,6 +145,13 @@ def _paginate(items_buttons, page, nav_back_data, page_cb):
     return _kb(kb)
 
 
+# Постоянная reply-кнопка под полем ввода: владельцу не надо писать /start —
+# тапнул «📋 Меню» и открылось меню. is_persistent — кнопка не прячется.
+MAIN_REPLY_KB = {'keyboard': [[{'text': '📋 Меню'}]],
+                 'resize_keyboard': True, 'is_persistent': True}
+MENU_BUTTON_TEXT = '📋 Меню'
+
+
 def kb_suppliers(rows):
     btns = []
     for src in suppliers_present(rows):

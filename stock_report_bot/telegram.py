@@ -84,9 +84,17 @@ def get_updates(offset=None, timeout=25):
     payload = {'timeout': timeout, 'allowed_updates': ['message', 'callback_query']}
     if offset is not None:
         payload['offset'] = offset
-    # HTTP-timeout должен быть больше long-poll timeout.
-    result = _post('getUpdates', payload, timeout=timeout + 15, retries=1)
+    # (connect, read): связь VPS→Telegram бывает залипает на коннекте — быстрый
+    # connect-timeout (10с) даёт переподключиться вместо ожидания 40с; read должен
+    # быть больше long-poll timeout, чтобы успел вернуться апдейт.
+    result = _post('getUpdates', payload, timeout=(10, timeout + 15), retries=1)
     return result or []
+
+
+def set_my_commands(commands):
+    """setMyCommands — наполняет нативную кнопку «☰ Menu» рядом с полем ввода
+    (список команд, напр. /menu). Идемпотентно, зовём при старте бота."""
+    return _post('setMyCommands', {'commands': commands})
 
 
 def send_message(chat_id, text, reply_markup=None):

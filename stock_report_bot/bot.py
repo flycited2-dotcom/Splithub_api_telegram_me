@@ -17,6 +17,7 @@ from stock_report_bot.db import fetch_stock_rows, fetch_tech_values
 from stock_report_bot import menu, specs
 from stock_report_bot.telegram import (
     answer_callback_query, edit_message_text, get_updates, send_message, send_photo,
+    set_my_commands,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -153,7 +154,11 @@ def _handle_message(msg):
     text = (msg.get('text') or '').strip()
     if not _is_owner(from_id):
         return
-    if text in ('/menu', '/start'):
+    if text == '/start':
+        # один раз ставим постоянную кнопку «📋 Меню» — дальше владелец просто тапает её
+        send_message(chat_id, 'Готово 👇 Жмите «📋 Меню» в любой момент.', menu.MAIN_REPLY_KB)
+        send_message(chat_id, menu.text_suppliers(), menu.kb_suppliers(_rows()))
+    elif text in ('/menu', menu.MENU_BUTTON_TEXT):
         send_message(chat_id, menu.text_suppliers(), menu.kb_suppliers(_rows()))
 
 
@@ -161,6 +166,10 @@ def run():
     if not TELEGRAM_OWNER_CHAT_ID:
         logger.error('TELEGRAM_OWNER_CHAT_ID не задан — некого слушать')
         return 1
+    try:
+        set_my_commands([{'command': 'menu', 'description': '📋 Остатки с наценкой'}])
+    except Exception as exc:
+        logger.warning('setMyCommands не удалось: %s', exc)
     logger.info('menu-bot запущен, long-polling…')
     offset = None
     while True:
