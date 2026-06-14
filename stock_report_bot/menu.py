@@ -185,11 +185,15 @@ def kb_markup(source, brand_idx, series_idx):
     return _kb([disc, row1, row2, back])
 
 
-def kb_result_specs(source, brand_idx, series_idx):
-    """Кнопка под итоговым списком серии: добавить блок характеристик (callback `c|…`).
-    Inline-клавиатура срезается Telegram при форварде — клиент кнопку не увидит."""
+def kb_specs_choice(source, brand_idx, series_idx, pct):
+    """После выбора % — две кнопки: прислать итог С характеристиками (`gs|…`) или
+    БЕЗ (`gp|…`). Характеристики (если выбраны) прилетают одним сообщением с фото/списком."""
     code = SRC_CODE[source]
-    return _kb([[_btn('➕ Добавить характеристики', cb_pack('c', code, brand_idx, series_idx))]])
+    return _kb([
+        [_btn('✅ С характеристиками', cb_pack('gs', code, brand_idx, series_idx, pct))],
+        [_btn('📄 Без характеристик', cb_pack('gp', code, brand_idx, series_idx, pct))],
+        [_btn('⬅ Назад', cb_pack('k', code, brand_idx, series_idx))],
+    ])
 
 
 # ── текст уровней навигации ────────────────────────────────────────────────
@@ -211,12 +215,20 @@ def text_markup(source, brand, series):
             f'Наценка (+) или скидка (−) к опт-цене:')
 
 
+def text_specs_choice(brand, series, pct):
+    sign = '+' if pct > 0 else '−'
+    return (f'<b>{html.escape(brand)}</b> · {html.escape(series)}  ({sign}{abs(pct)}%)\n'
+            f'Прислать итог с характеристиками?')
+
+
 # ── итоговый список с наценкой ─────────────────────────────────────────────
-def build_priced_message(rows, source, brand, series, pct, breez_base=None):
+def build_priced_message(rows, source, brand, series, pct, breez_base=None, extra_block=None):
     """Текст сообщения со списком позиций серии в наличии: опт × (1+pct%) → …90.
 
     Шапка — только 2 эмодзи (🏷 + квадрат поставщика): сообщение готово к пересылке
-    клиенту, поставщик и величина наценки/скидки в нём НЕ раскрываются."""
+    клиенту, поставщик и величина наценки/скидки в нём НЕ раскрываются.
+    `extra_block` (блок характеристик из specs.build_specs_block) — если задан,
+    добавляется в КОНЕЦ как единый блок, чтобы прилететь одним сообщением с фото/списком."""
     emoji = SUPPLIER_EMOJI.get(source, '▫️')
     head = f'🏷 {emoji}'
     lines = [head, '']
@@ -230,4 +242,6 @@ def build_priced_message(rows, source, brand, series, pct, breez_base=None):
         lines.append(f'• {head_b}{name} — {_fmt_price(price)} — {_qty_for(r)} шт.')
     if not items:
         lines.append('Нет позиций в наличии.')
+    if extra_block:
+        lines += ['', extra_block]   # extra_block — одна «строка» с \n: _chunk_lines не рвёт цитату
     return _chunk_lines(lines, 3900)

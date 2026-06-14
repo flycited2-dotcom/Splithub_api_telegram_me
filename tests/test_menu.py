@@ -154,6 +154,25 @@ class BuildMessageTests(unittest.TestCase):
         text = '\n'.join(menu.build_priced_message(rows, 'daichi', 'Kentatsu', 'Kanami', -5))
         self.assertIn('— 25 090 ₽ — 12 шт.', text)   # −5% от опта
 
+    def test_extra_block_glued_one_message(self):
+        rows = [_row('daichi', 'Kentatsu Kanami KSGAA35', Decimal('26404'), 12,
+                     brand='Kentatsu', series='Kanami')]
+        block = '💡 Kentatsu Kanami — ключевые особенности:\n<blockquote>❄️ Инверторная технология</blockquote>'
+        chunks = menu.build_priced_message(rows, 'daichi', 'Kentatsu', 'Kanami', 5, extra_block=block)
+        text = '\n'.join(chunks)
+        self.assertEqual(len(chunks), 1)                 # список + характеристики одним сообщением
+        self.assertIn('27 790 ₽', text)                  # список
+        self.assertIn('<blockquote>❄️ Инверторная технология</blockquote>', text)  # цитата не разорвана
+
+
+class SpecsChoiceTests(unittest.TestCase):
+    def test_two_buttons_and_back(self):
+        kb = menu.kb_specs_choice('breeze', 1, 2, 5)
+        datas = [b['callback_data'] for row in kb['inline_keyboard'] for b in row]
+        self.assertIn('gs|b|1|2|5', datas)   # с характеристиками
+        self.assertIn('gp|b|1|2|5', datas)   # без характеристик
+        self.assertIn('k|b|1|2', datas)      # ⬅ назад к выбору наценки
+
 
 if __name__ == '__main__':
     unittest.main()

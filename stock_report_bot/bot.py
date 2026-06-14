@@ -68,24 +68,21 @@ def _resolve(rows, code, brand_idx=None, series_idx=None):
     return source, brand, series
 
 
-def _send_result(chat_id, chunks, image_url, reply_markup=None):
+def _send_result(chat_id, chunks, image_url):
     """Итог: фото внутреннего блока + список-подпись снизу (для пересылки клиенту).
     Подпись Telegram ≤ 1024 — если первый кусок влезает, шлём его подписью к фото,
     остальное (редко) текстом; если длинный — фото с мин. подписью + список текстом.
     Картинки нет / Telegram не смог её забрать → откат на только текст.
-    `reply_markup` (кнопка «Добавить характеристики») вешаем на ПОСЛЕДНЕЕ сообщение."""
+    Характеристики (если выбраны) уже вклеены в chunks — отдельным сообщением НЕ шлём."""
     if image_url:
         cap = chunks[0] if len(chunks[0]) <= 1024 else '🏷'
-        rest = chunks[1:] if cap == chunks[0] else chunks
-        if send_photo(chat_id, image_url, caption=cap,
-                      reply_markup=reply_markup if not rest else None):
-            for i, chunk in enumerate(rest):
-                send_message(chat_id, chunk,
-                             reply_markup=reply_markup if i == len(rest) - 1 else None)
+        if send_photo(chat_id, image_url, caption=cap):
+            rest = chunks[1:] if cap == chunks[0] else chunks
+            for chunk in rest:
+                send_message(chat_id, chunk)
             return
-    for i, chunk in enumerate(chunks):
-        send_message(chat_id, chunk,
-                     reply_markup=reply_markup if i == len(chunks) - 1 else None)
+    for chunk in chunks:
+        send_message(chat_id, chunk)
 
 
 def _handle_callback(cb):
@@ -121,27 +118,29 @@ def _handle_callback(cb):
             source, brand, series = _resolve(rows, code, bidx, sidx)
             edit_message_text(chat_id, message_id, menu.text_markup(source, brand, series),
                               menu.kb_markup(source, bidx, sidx))
-        elif action == 'g':                       # g|code|bidx|sidx|pct
+        elif action == 'g':                       # g|code|bidx|sidx|pct — выбор: с/без характеристик
+            code, bidx, sidx, pct = parts[1], int(parts[2]), int(parts[3]), int(parts[4])
+            source, brand, series = _resolve(rows, code, bidx, sidx)
+            edit_message_text(chat_id, message_id, menu.text_specs_choice(brand, series, pct),
+                              menu.kb_specs_choice(source, bidx, sidx, pct))
+        elif action in ('gp', 'gs'):              # отправка итога БЕЗ (gp) / С (gs) характеристиками
             code, bidx, sidx, pct = parts[1], int(parts[2]), int(parts[3]), int(parts[4])
             source, brand, series = _resolve(rows, code, bidx, sidx)
             breez_base = _breez_base() if source == 'breeze' else None
-            chunks = menu.build_priced_message(rows, source, brand, series, pct, breez_base)
+            extra_block = None
+            if action == 'gs':
+                positions = menu.positions_for(rows, source, brand, series)
+                nc_codes = [r.get('nc_code') for r in positions if r.get('nc_code')]
+                titles = [r.get('title') for r in positions]
+                utp_raw = None
+                if source == 'breeze':
+                    utp_map = _breez_utp()
+                    utp_raw = next((utp_map.get(nc) for nc in nc_codes if utp_map.get(nc)), None)
+                extra_block = specs.build_specs_block(
+                    fetch_tech_values(nc_codes), brand, series, source, utp_raw, titles)
+            chunks = menu.build_priced_message(rows, source, brand, series, pct, breez_base, extra_block)
             image_url = menu.series_image(rows, source, brand, series)
-            _send_result(chat_id, chunks, image_url,
-                         menu.kb_result_specs(source, bidx, sidx))
-        elif action == 'c':                       # c|code|bidx|sidx — характеристики серии
-            code, bidx, sidx = parts[1], int(parts[2]), int(parts[3])
-            source, brand, series = _resolve(rows, code, bidx, sidx)
-            positions = menu.positions_for(rows, source, brand, series)
-            nc_codes = [r.get('nc_code') for r in positions if r.get('nc_code')]
-            titles = [r.get('title') for r in positions]
-            utp_raw = None
-            if source == 'breeze':
-                utp_map = _breez_utp()
-                utp_raw = next((utp_map.get(nc) for nc in nc_codes if utp_map.get(nc)), None)
-            for chunk in specs.build_specs_message(
-                    fetch_tech_values(nc_codes), brand, series, source, utp_raw, titles):
-                send_message(chat_id, chunk)
+            _send_result(chat_id, chunks, image_url)
         answer_callback_query(cq_id)
     except (IndexError, KeyError, ValueError):
         logger.warning('callback устарел/битый: %s', data)

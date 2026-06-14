@@ -230,9 +230,9 @@ def _utp_extras(t, source, utp_raw):
     return out
 
 
-def build_specs_message(tech_rows, brand, series, source, utp_raw=None,
-                        titles=None, max_len=3900):
-    """Список Telegram-сообщений (HTML) с блоком-цитатой ключевых особенностей серии.
+def build_specs_block(tech_rows, brand, series, source, utp_raw=None, titles=None):
+    """Текст блока «ключевые особенности» серии (HTML, цитата). Одной строкой
+    (с \\n внутри) — вклеивается в общий итог рядом с фото и списком моделей.
 
     tech_rows: [{'title','value'}] по всем позициям серии (из БД сайта).
     utp_raw: строка `utp` Бриза из Бриз API (None для прочих).
@@ -245,11 +245,16 @@ def build_specs_message(tech_rows, brand, series, source, utp_raw=None,
 
     head = f'💡 {html.escape(brand)} {html.escape(series)} — ключевые особенности:'
     if not lines:
-        return [f'{head}\nХарактеристики уточняются.']
+        return f'{head}\nХарактеристики уточняются.'
     body = '\n'.join(html.escape(ln) for ln in lines)
-    text = f'{head}\n<blockquote>{body}</blockquote>'
-    if len(text) <= max_len:
-        return [text]
-    # Подстраховка (блок почти всегда мал): без цитаты, режем по строкам.
-    from stock_report_bot.report import _chunk_lines
-    return _chunk_lines([head] + [html.escape(ln) for ln in lines], max_len)
+    return f'{head}\n<blockquote>{body}</blockquote>'
+
+
+def build_specs_message(tech_rows, brand, series, source, utp_raw=None,
+                        titles=None, max_len=3900):
+    """Блок характеристик как список Telegram-сообщений (для отдельной отправки/тестов)."""
+    block = build_specs_block(tech_rows, brand, series, source, utp_raw, titles)
+    if len(block) <= max_len:
+        return [block]
+    from stock_report_bot.report import _chunk_lines   # подстраховка (блок почти всегда мал)
+    return _chunk_lines(block.split('\n'), max_len)
