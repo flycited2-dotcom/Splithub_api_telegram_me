@@ -158,5 +158,38 @@ class BuildEmptyTests(unittest.TestCase):
         self.assertNotIn('<blockquote>', text)
 
 
+class BuildForCardTests(unittest.TestCase):
+    """build_specs_for_card — plain-text список для промпта фотоген-агента."""
+
+    def setUp(self):
+        self.rows = [
+            _tr('Класс энергоэффективности EER (охлаждение)', 'A+++'),
+            _tr('Инверторная технология', 'да'),
+            _tr('Минимальный уровень шума внутреннего блока', '19'),
+            _tr('Управление c мобильного приложения по Wi-Fi', 'да'),
+        ]
+
+    def test_returns_plain_list(self):
+        lines = specs.build_specs_for_card(self.rows, 'Hisense', 'AKOYA', 'breeze')
+        self.assertIsInstance(lines, list)
+        self.assertTrue(all(isinstance(s, str) for s in lines))
+        joined = '\n'.join(lines)
+        # plain text: ни HTML-обёртки, ни шапки блока
+        self.assertNotIn('<blockquote>', joined)
+        self.assertNotIn('💡', joined)
+        self.assertIn('Класс энергоэффективности A+++', joined)
+        self.assertIn('Wi-Fi управление', joined)
+
+    def test_empty_rows_empty_list(self):
+        self.assertEqual(specs.build_specs_for_card([], 'X', 'Y', 'breeze'), [])
+
+    def test_lines_match_block(self):
+        # Те же пункты, что попадают в build_specs_block (цитата) — без задвоений логики.
+        lines = specs.build_specs_for_card(self.rows, 'Hisense', 'AKOYA', 'breeze')
+        block = specs.build_specs_block(self.rows, 'Hisense', 'AKOYA', 'breeze')
+        for ln in lines:
+            self.assertIn(ln, block)
+
+
 if __name__ == '__main__':
     unittest.main()

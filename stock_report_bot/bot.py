@@ -8,13 +8,14 @@
 серверной обёртки). Данные — read-only из БД сайта (fetch_stock_rows), опт Бриза — из
 Бриз API (кэш с TTL).
 """
+import html
 import logging
 import time
 
 from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID
 from stock_report_bot.breez import fetch_breez_base_by_nc, fetch_breez_utp_by_nc
 from stock_report_bot.db import fetch_stock_rows, fetch_tech_values
-from stock_report_bot import menu, specs
+from stock_report_bot import menu, specs, fotogen_bridge
 from stock_report_bot.telegram import (
     answer_callback_query, edit_message_text, get_updates, send_message, send_photo,
     set_my_commands,
@@ -143,6 +144,38 @@ def _handle_callback(cb):
             chunks = menu.build_priced_message(rows, source, brand, series, pct, breez_base, extra_block)
             image_url = menu.series_image(rows, source, brand, series)
             _send_result(chat_id, chunks, image_url)
+        elif action == 'c':                       # c|code|bidx|sidx — карточка в фотоген-агент
+            code, bidx, sidx = parts[1], int(parts[2]), int(parts[3])
+            source, brand, series = _resolve(rows, code, bidx, sidx)
+            positions = menu.positions_for(rows, source, brand, series)
+            nc_codes = [r.get('nc_code') for r in positions if r.get('nc_code')]
+            titles = [r.get('title') for r in positions]
+            utp_raw = None
+            if source == 'breeze':
+                utp_map = _breez_utp()
+                utp_raw = next((utp_map.get(nc) for nc in nc_codes if utp_map.get(nc)), None)
+            spec_lines = specs.build_specs_for_card(
+                fetch_tech_values(nc_codes), brand, menu.short_series(series),
+                source, utp_raw=utp_raw, titles=titles)
+            photo_url = menu.series_image(rows, source, brand, series)
+            short = menu.short_series(series)
+            if not photo_url:
+                edit_message_text(chat_id, message_id,
+                    '⚠️ Фото товара не найдено в базе. Загрузите фото вручную в фотоген-боте.',
+                    None)
+            else:
+                ok, err = fotogen_bridge.submit_card(
+                    photo_url=photo_url, brand=brand, model=short,
+                    specs_lines=spec_lines, chat_id=chat_id)
+                if ok:
+                    edit_message_text(chat_id, message_id,
+                        f'⏳ <b>{html.escape(brand)} {html.escape(short)}</b>\n'
+                        'Карточка отправлена в фотоген-агент. Готовая карточка придёт '
+                        'через ~2 мин в чат фотоген-бота с кнопками подтверждения.',
+                        None)
+                else:
+                    edit_message_text(chat_id, message_id,
+                        f'❌ Не удалось отправить задачу: {html.escape(err)}', None)
         answer_callback_query(cq_id)
     except (IndexError, KeyError, ValueError):
         logger.warning('callback устарел/битый: %s', data)

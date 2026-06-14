@@ -27,3 +27,9 @@ TELEGRAM_API_URL = config('TELEGRAM_API_URL', default='https://api.telegram.org'
 # что в /opt/oasis/.env сайта (BREEZ_AUTH_HEADER). Пусто → опт Бриза = цена из БД.
 BREEZ_BASE_URL = config('BREEZ_BASE_URL', default='https://api.breez.ru/v1/')
 BREEZ_AUTH_HEADER = config('BREEZ_AUTH_HEADER', default='')
+
+# Фотоген-агент: URL API и токен. Stock Bot и фотоген — на одном VPS, поэтому URL —
+# localhost. Токен = API_TOKEN из .env фотоген-агента. Пусто → кнопка «Создать
+# карточку» вернёт ошибку «не задан» (см. fotogen_bridge.submit_card).
+FOTOGEN_API_URL = config('FOTOGEN_API_URL', default='')
+FOTOGEN_API_TOKEN = config('FOTOGEN_API_TOKEN', default='')

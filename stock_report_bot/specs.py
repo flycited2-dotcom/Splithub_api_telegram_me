@@ -230,6 +230,19 @@ def _utp_extras(t, source, utp_raw):
     return out
 
 
+def build_specs_for_card(tech_rows, brand, series, source, utp_raw=None, titles=None):
+    """Список строк-преимуществ серии (plain text, без HTML) — для подстановки в
+    {{SPECS}} промпта фотоген-агента. Те же пункты и порядок, что в build_specs_block,
+    но без HTML-обёртки и шапки. Пусто → [].
+
+    brand/series в сигнатуре для симметрии с build_specs_block (на сами пункты не влияют).
+    """
+    t = _Tech(tech_rows, titles)
+    lines = [ln for extract in _FEATURES if (ln := extract(t))]
+    lines += _utp_extras(t, source, utp_raw)
+    return lines
+
+
 def build_specs_block(tech_rows, brand, series, source, utp_raw=None, titles=None):
     """Текст блока «ключевые особенности» серии (HTML, цитата). Одной строкой
     (с \\n внутри) — вклеивается в общий итог рядом с фото и списком моделей.
@@ -239,9 +252,7 @@ def build_specs_block(tech_rows, brand, series, source, utp_raw=None, titles=Non
     titles: названия позиций серии — запасной детектор инвертора, когда tech-поля нет.
     Шапка — бренд+серия (поставщик/наценка НЕ раскрываются — готово к пересылке клиенту).
     """
-    t = _Tech(tech_rows, titles)
-    lines = [ln for extract in _FEATURES if (ln := extract(t))]
-    lines += _utp_extras(t, source, utp_raw)
+    lines = build_specs_for_card(tech_rows, brand, series, source, utp_raw, titles)
 
     head = f'💡 {html.escape(brand)} {html.escape(series)} — ключевые особенности:'
     if not lines:

@@ -207,8 +207,9 @@ def kb_markup(source, brand_idx, series_idx):
     disc = [_pct_btn(code, brand_idx, series_idx, p) for p in DISCOUNT_PCTS]      # −1/−3/−5/−7
     row1 = [_pct_btn(code, brand_idx, series_idx, p) for p in MARKUP_PCTS[:5]]    # +1..+5
     row2 = [_pct_btn(code, brand_idx, series_idx, p) for p in MARKUP_PCTS[5:]]    # +6..+10
+    card = [_btn('🎨 Создать карточку для канала', cb_pack('c', code, brand_idx, series_idx))]
     back = [_btn('⬅ Назад', cb_pack('s', code, brand_idx, 0))]
-    return _kb([disc, row1, row2, back])
+    return _kb([disc, row1, row2, card, back])
 
 
 def kb_specs_choice(source, brand_idx, series_idx, pct):
