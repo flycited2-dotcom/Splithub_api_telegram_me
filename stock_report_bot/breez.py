@@ -1,9 +1,11 @@
-"""Опт-цена (base) Бриза напрямую из Бриз API.
+"""Прямой доступ к Бриз API за тем, чего нет в БД сайта.
 
-Бриз отдаёт опт/закупку (`base`) только в своём stock-эндпоинте `/leftoversnew/`;
-в БД сайта у Бриза лежит розница. Поэтому сервис спрашивает Бриз сам — сайт при
-этом НЕ трогается. Rusklimat/Daichi опт берут из БД (там он есть), для них этот
-модуль не нужен.
+1. Опт-цена (`base`): Бриз отдаёт опт/закупку только в `/leftoversnew/`; в БД сайта
+   у Бриза лежит розница. Поэтому сервис спрашивает Бриз сам — сайт НЕ трогается.
+   Rusklimat/Daichi опт берут из БД (там он есть), для них это не нужно.
+2. УТП (`utp`): готовый список преимуществ товара. Синк сайта кладёт в БД только
+   tech-характеристики, а поле `utp` из `/products/` теряет (в модели товара его нет).
+   Для блока «ключевые особенности» (см. `specs.py`) берём `utp` Бриза тем же ключом.
 """
 import logging
 
@@ -82,4 +84,48 @@ def fetch_breez_base_by_nc():
 
     result = _parse_leftovers(data)
     logger.info('breez: получено опт-цен (base) по %d позициям', len(result))
+    return result
+
+
+def _parse_products_utp(data):
+    """Из ответа `/products/` (dict id→продукт) строит {nc_code: utp_raw}. Чистая
+    функция (без сети) — тестируется напрямую. Пустые/без nc позиции пропускаются."""
+    result = {}
+    if not isinstance(data, dict):
+        return result
+    for entry in data.values():
+        if not isinstance(entry, dict):
+            continue
+        nc = entry.get('nc')
+        utp = entry.get('utp')
+        if nc and utp and str(utp).strip():
+            result[str(nc)] = str(utp)
+    return result
+
+
+def fetch_breez_utp_by_nc():
+    """Словарь {nc_code: utp_raw} из Бриз `/products/` (тот же ключ BREEZE_AUTH_HEADER).
+
+    Пусто, если ключ не задан или запрос упал — тогда блок особенностей по Бризу
+    обойдётся без УТП-экстра (технические пункты берутся из БД). Сайт не задействован.
+    """
+    if not BREEZ_AUTH_HEADER or 'REPLACE' in BREEZ_AUTH_HEADER:
+        logger.warning('breez utp: ключ не задан — УТП Бриза недоступно')
+        return {}
+
+    url = BREEZ_BASE_URL.rstrip('/') + '/products/'
+    try:
+        resp = requests.get(
+            url,
+            headers={'Authorization': BREEZ_AUTH_HEADER, 'Accept': 'application/json'},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:
+        logger.error('breez utp fetch failed: %s', exc)
+        return {}
+
+    result = _parse_products_utp(data)
+    logger.info('breez: получено utp по %d позициям', len(result))
     return result

@@ -79,3 +79,34 @@ def fetch_stock_rows():
             return cur.fetchall()
     finally:
         conn.close()
+
+
+# Технические характеристики позиций серии — для блока «ключевые особенности»
+# (см. specs.py). Берём по nc_code; ORDER BY p.id, ts.order — строки первой позиции
+# идут первыми (она «представительная» для качественных признаков серии).
+_TECH_QUERY = """
+SELECT ts.title AS title, pt.value AS value
+FROM catalog_producttech pt
+JOIN catalog_techspec ts ON ts.id = pt.spec_id
+JOIN catalog_product p ON p.id = pt.product_id
+WHERE p.nc_code = ANY(%(ncs)s)
+ORDER BY p.id, ts."order";
+"""
+
+
+def fetch_tech_values(nc_codes):
+    """Список dict'ов {title, value} по характеристикам товаров с указанными nc_code
+    (read-only). Пусто, если список пуст. Дёргается лениво — при нажатии кнопки
+    «Добавить характеристики»."""
+    if not nc_codes:
+        return []
+    conn = psycopg2.connect(
+        host=DB['host'], port=DB['port'], dbname=DB['dbname'],
+        user=DB['user'], password=DB['password'],
+    )
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(_TECH_QUERY, {'ncs': list(nc_codes)})
+            return cur.fetchall()
+    finally:
+        conn.close()

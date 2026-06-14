@@ -185,6 +185,13 @@ def kb_markup(source, brand_idx, series_idx):
     return _kb([disc, row1, row2, back])
 
 
+def kb_result_specs(source, brand_idx, series_idx):
+    """Кнопка под итоговым списком серии: добавить блок характеристик (callback `c|…`).
+    Inline-клавиатура срезается Telegram при форварде — клиент кнопку не увидит."""
+    code = SRC_CODE[source]
+    return _kb([[_btn('➕ Добавить характеристики', cb_pack('c', code, brand_idx, series_idx))]])
+
+
 # ── текст уровней навигации ────────────────────────────────────────────────
 def text_suppliers():
     return '📦 <b>Остатки с наценкой</b>\nВыберите поставщика:'

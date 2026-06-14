@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from stock_report_bot.breez import _extract_base, _parse_leftovers
+from stock_report_bot.breez import _extract_base, _parse_leftovers, _parse_products_utp
 
 
 class BreezParseTests(unittest.TestCase):
@@ -34,6 +34,23 @@ class BreezParseTests(unittest.TestCase):
     def test_parse_skips_entries_without_base(self):
         data = {'НС-3': {'price': [{'ric': 41200.0}]}}   # нет base → позиция пропущена
         self.assertEqual(_parse_leftovers(data), {})
+
+
+class BreezUtpParseTests(unittest.TestCase):
+    """Парсинг `utp` из ответа Бриз `/products/` — чистая функция, без сети."""
+
+    def test_maps_nc_to_utp(self):
+        data = {
+            '1000000': {'nc': 'НС-0000001', 'utp': '&#9679; Стильный дизайн;<br>'},
+            '1000001': {'nc': 'НС-0000002', 'utp': ''},        # пустой utp → пропуск
+            '1000002': {'nc': 'НС-0000003'},                   # нет utp → пропуск
+        }
+        self.assertEqual(_parse_products_utp(data),
+                         {'НС-0000001': '&#9679; Стильный дизайн;<br>'})
+
+    def test_bad_input(self):
+        self.assertEqual(_parse_products_utp([]), {})
+        self.assertEqual(_parse_products_utp(None), {})
 
 
 if __name__ == '__main__':

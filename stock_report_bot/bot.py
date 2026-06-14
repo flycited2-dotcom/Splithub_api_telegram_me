@@ -12,9 +12,9 @@ import logging
 import time
 
 from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID
-from stock_report_bot.breez import fetch_breez_base_by_nc
-from stock_report_bot.db import fetch_stock_rows
-from stock_report_bot import menu
+from stock_report_bot.breez import fetch_breez_base_by_nc, fetch_breez_utp_by_nc
+from stock_report_bot.db import fetch_stock_rows, fetch_tech_values
+from stock_report_bot import menu, specs
 from stock_report_bot.telegram import (
     answer_callback_query, edit_message_text, get_updates, send_message, send_photo,
 )
@@ -24,7 +24,8 @@ logger = logging.getLogger('stock_report_bot.bot')
 
 _ROWS_TTL = 120      # снапшот остатков
 _BREEZ_TTL = 300     # опт Бриза из API
-_cache = {'rows': (0, None), 'breez': (0, None)}
+_UTP_TTL = 1800      # УТП Бриза из API (меняется редко — держим дольше)
+_cache = {'rows': (0, None), 'breez': (0, None), 'utp': (0, None)}
 
 
 def _rows():
@@ -40,6 +41,14 @@ def _breez_base():
     if val is None or time.time() - ts > _BREEZ_TTL:
         val = fetch_breez_base_by_nc()
         _cache['breez'] = (time.time(), val)
+    return val
+
+
+def _breez_utp():
+    ts, val = _cache['utp']
+    if val is None or time.time() - ts > _UTP_TTL:
+        val = fetch_breez_utp_by_nc()
+        _cache['utp'] = (time.time(), val)
     return val
 
 
@@ -59,20 +68,24 @@ def _resolve(rows, code, brand_idx=None, series_idx=None):
     return source, brand, series
 
 
-def _send_result(chat_id, chunks, image_url):
+def _send_result(chat_id, chunks, image_url, reply_markup=None):
     """Итог: фото внутреннего блока + список-подпись снизу (для пересылки клиенту).
     Подпись Telegram ≤ 1024 — если первый кусок влезает, шлём его подписью к фото,
     остальное (редко) текстом; если длинный — фото с мин. подписью + список текстом.
-    Картинки нет / Telegram не смог её забрать → откат на только текст."""
+    Картинки нет / Telegram не смог её забрать → откат на только текст.
+    `reply_markup` (кнопка «Добавить характеристики») вешаем на ПОСЛЕДНЕЕ сообщение."""
     if image_url:
         cap = chunks[0] if len(chunks[0]) <= 1024 else '🏷'
-        if send_photo(chat_id, image_url, caption=cap):
-            rest = chunks[1:] if cap == chunks[0] else chunks
-            for chunk in rest:
-                send_message(chat_id, chunk)
+        rest = chunks[1:] if cap == chunks[0] else chunks
+        if send_photo(chat_id, image_url, caption=cap,
+                      reply_markup=reply_markup if not rest else None):
+            for i, chunk in enumerate(rest):
+                send_message(chat_id, chunk,
+                             reply_markup=reply_markup if i == len(rest) - 1 else None)
             return
-    for chunk in chunks:
-        send_message(chat_id, chunk)
+    for i, chunk in enumerate(chunks):
+        send_message(chat_id, chunk,
+                     reply_markup=reply_markup if i == len(chunks) - 1 else None)
 
 
 def _handle_callback(cb):
@@ -114,7 +127,21 @@ def _handle_callback(cb):
             breez_base = _breez_base() if source == 'breeze' else None
             chunks = menu.build_priced_message(rows, source, brand, series, pct, breez_base)
             image_url = menu.series_image(rows, source, brand, series)
-            _send_result(chat_id, chunks, image_url)
+            _send_result(chat_id, chunks, image_url,
+                         menu.kb_result_specs(source, bidx, sidx))
+        elif action == 'c':                       # c|code|bidx|sidx — характеристики серии
+            code, bidx, sidx = parts[1], int(parts[2]), int(parts[3])
+            source, brand, series = _resolve(rows, code, bidx, sidx)
+            positions = menu.positions_for(rows, source, brand, series)
+            nc_codes = [r.get('nc_code') for r in positions if r.get('nc_code')]
+            titles = [r.get('title') for r in positions]
+            utp_raw = None
+            if source == 'breeze':
+                utp_map = _breez_utp()
+                utp_raw = next((utp_map.get(nc) for nc in nc_codes if utp_map.get(nc)), None)
+            for chunk in specs.build_specs_message(
+                    fetch_tech_values(nc_codes), brand, series, source, utp_raw, titles):
+                send_message(chat_id, chunk)
         answer_callback_query(cq_id)
     except (IndexError, KeyError, ValueError):
         logger.warning('callback устарел/битый: %s', data)
