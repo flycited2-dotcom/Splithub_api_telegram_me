@@ -1,8 +1,9 @@
 """Тесты подписи-прайса для канала (channel_caption.py). Чистые функции — без БД/сети.
 
-ВАЖНО: `btu_calc` сайта — это УЖЕ номинал в kBTU (7/9/10/12/13/14/16/18/20/22/24/…/60),
-а не полные BTU (9000). Размер берём как есть, без повторного снапа к урезанному набору
-(старый баг 10→9, 14→12 давал «поплывшие»/дублирующиеся размеры)."""
+`btu_calc` сайта — уже номинал kBTU (7/9/10/12/…/60), берём как есть (без снапа).
+Но у части серий btu_calc неверен (несколько разных моделей с одним размером — напр.
+Ballu Olympio Legend: 3 модели 7/9/12, все помечены 7). При такой «коллизии» не
+схлопываем в одну строку: размеры берём из артикула, иначе показываем по коду модели."""
 import os
 import sys
 import unittest
@@ -16,12 +17,10 @@ from stock_report_bot.report import _fmt_price
 
 class SizeFromBtuTests(unittest.TestCase):
     def test_nominal_taken_as_is(self):
-        # btu_calc уже номинал — возвращаем как есть (никакого снапа к 7/9/12/18/24).
         for n in (7, 9, 10, 12, 13, 14, 16, 18, 20, 22, 24, 25, 26, 27, 30, 36, 48, 60):
             self.assertEqual(cc.size_from_btu(n), n, n)
 
     def test_legacy_full_btu_divided(self):
-        # Подстраховка: если прилетит в полных BTU — делим на 1000.
         self.assertEqual(cc.size_from_btu(9000), 9)
         self.assertEqual(cc.size_from_btu(12000), 12)
 
@@ -45,7 +44,6 @@ class BuildCaptionTests(unittest.TestCase):
         p7 = _fmt_price(marked_price(30000, 10))
         p9 = _fmt_price(marked_price(40000, 10))
         p18 = _fmt_price(marked_price(60000, 10))
-        self.assertIn(p7, cap)
         self.assertLess(cap.index(p7), cap.index(p9))   # сортировка по размеру 7→9→18
         self.assertLess(cap.index(p9), cap.index(p18))
         self.assertNotEqual(p7, '30 000 ₽')             # цена с наценкой, не опт
@@ -55,19 +53,33 @@ class BuildCaptionTests(unittest.TestCase):
         positions = [_pos(10, 40000), _pos(14, 50000), _pos(20, 70000)]
         cap = cc.build_channel_caption(positions, 5, 'Ballu', 'Olympio', 'daichi')
         body = cap.split('──')[-1]
-        self.assertIn('10', body)
-        self.assertIn('14', body)
-        self.assertIn('20', body)
+        for n in ('10', '14', '20'):
+            self.assertIn(n, body)
         self.assertNotIn('9 —', body)                   # 10 НЕ превратилось в 9
-        self.assertNotIn('12 —', body)                  # 14 НЕ превратилось в 12
 
-    def test_dedup_same_size_min_price(self):
-        # Два товара одного размера → одна строка с минимальной ценой (не «9, 9»).
-        positions = [_pos(9, 50000), _pos(9, 40000)]
+    def test_collision_recovers_sizes_from_article(self):
+        # Ballu Olympio Legend: btu_calc у всех = 7 (баг сайта), но артикулы 07/09/12.
+        positions = [
+            _pos(7, 15890, title='Ballu Olympio Legend BSO-07HN8'),
+            _pos(7, 16990, title='Ballu Olympio Legend BSO-09HN8'),
+            _pos(7, 23290, title='Ballu Olympio Legend BSO-12HN8'),
+        ]
+        cap = cc.build_channel_caption(positions, 0, 'Ballu', 'Olympio Legend', 'daichi')
+        # все три позиции на месте (не схлопнулись в одну) и в порядке 7→9→12
+        self.assertIn('15 890 ₽', cap)
+        self.assertIn('16 990 ₽', cap)
+        self.assertIn('23 290 ₽', cap)
+        self.assertLess(cap.index('15 890'), cap.index('16 990'))
+        self.assertLess(cap.index('16 990'), cap.index('23 290'))
+
+    def test_collision_without_codes_lists_by_model(self):
+        # Коллизия размеров, в артикуле кода нет → показываем все по коду модели.
+        positions = [_pos(9, 40000, title='X AlphaUnit'), _pos(9, 50000, title='X BetaUnit')]
         cap = cc.build_channel_caption(positions, 0, 'X', 'Y', 'daichi')
-        self.assertEqual(cap.count('9 —'), 1)
-        self.assertIn(_fmt_price(marked_price(40000, 0)), cap)   # минимальная
-        self.assertNotIn(_fmt_price(marked_price(50000, 0)), cap)
+        self.assertIn('AlphaUnit', cap)
+        self.assertIn('BetaUnit', cap)
+        self.assertIn(_fmt_price(marked_price(40000, 0)), cap)
+        self.assertIn(_fmt_price(marked_price(50000, 0)), cap)   # обе показаны, не схлопнуты
 
     def test_inverter_header_toggle(self):
         on = cc.build_channel_caption([_pos(9, 40000)], 5, 'X', 'Y', 'daichi', inverter=True)
@@ -78,7 +90,7 @@ class BuildCaptionTests(unittest.TestCase):
     def test_unknown_btu_falls_back_to_model_name(self):
         positions = [_pos(None, 50000, title='Daichi SuperModel ABC'), _pos(9, 40000)]
         cap = cc.build_channel_caption(positions, 5, 'Daichi', 'Bravo', 'daichi')
-        self.assertIn('SuperModel ABC', cap)            # запасное имя (бренд срезан)
+        self.assertIn('SuperModel ABC', cap)
         self.assertLess(cap.index(_fmt_price(marked_price(40000, 5))),
                         cap.index('SuperModel'))          # размер раньше «без размера»
 
