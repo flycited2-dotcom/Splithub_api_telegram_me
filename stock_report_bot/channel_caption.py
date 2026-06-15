@@ -11,27 +11,23 @@ import html
 from stock_report_bot.report import _fmt_price, _price_for
 from stock_report_bot.menu import marked_price, short_series
 
-# Стандартные типоразмеры кондиционеров (тысячи BTU): бытовые 7/9/12/18/24,
-# полупромышленные 30/36/42/48/60. Номер в подписи — ближайший из них.
-_STD_SIZES = [7, 9, 12, 18, 24, 30, 36, 42, 48, 60]
-
-
 def size_from_btu(btu):
-    """Типоразмер (число «семёрка/девятка/…») из btu_calc. Нормализуем к тысячам BTU
-    (значение > 1000 — это BTU, делим на 1000; иначе уже в тысячах) и привязываем к
-    ближайшему стандартному. None — если значения нет или привязка недостоверна
-    (ближайший стандарт дальше 20%): тогда caller показывает имя модели."""
+    """Типоразмер (число «семёрка/девятка/…») из `btu_calc`.
+
+    `btu_calc` сайта — УЖЕ готовый номинал в kBTU (7/9/10/12/13/14/16/18/20/22/24/25/26/
+    27/30/32/35/36/40/42/48/60): сайт сам округляет к стандарту (apps/catalog/btu.py).
+    Поэтому берём значение КАК ЕСТЬ, без повторного снапа (иначе 10→9, 14→12 и дубли).
+    Подстраховка: если прилетело в полных BTU (9000) — делим на 1000. None — если нет/мусор."""
     try:
         v = float(btu)
     except (TypeError, ValueError):
         return None
     if v <= 0:
         return None
-    k = v / 1000.0 if v > 1000 else v
-    nearest = min(_STD_SIZES, key=lambda s: abs(s - k))
-    if abs(nearest - k) > nearest * 0.2:
-        return None
-    return nearest
+    if v > 200:           # на всякий случай: значение в полных BTU → в kBTU
+        v = v / 1000.0
+    n = int(round(v))
+    return n if 1 <= n <= 200 else None
 
 
 def _fallback_label(row, brand):
@@ -52,16 +48,20 @@ def build_channel_caption(positions, pct, brand, series, source,
     inverter:  добавить «· инвертор» в заголовок.
     Возвращает строку <blockquote>…</blockquote> (≤ 1024 символов для серии).
     """
-    rows = []
+    # Дедуп по типоразмеру: одна строка на размер (мин. цена), чтобы не было «7, 7, 12».
+    by_size = {}                 # size -> мин. цена с наценкой
+    extras = []                  # (label, price) — позиции без распознанного размера
     for r in positions:
         price = marked_price(_price_for(r, breez_base), pct)
         if price is None:
             continue
         size = size_from_btu(r.get('btu_calc'))
-        if size is not None:
-            rows.append((size, str(size), price))
-        else:
-            rows.append((10 ** 9, _fallback_label(r, brand), price))
+        if size is None:
+            extras.append((_fallback_label(r, brand), price))
+        elif size not in by_size or price < by_size[size]:
+            by_size[size] = price
+    rows = [(s, str(s), p) for s, p in by_size.items()]
+    rows += [(10 ** 9, lbl, p) for lbl, p in extras]
     rows.sort(key=lambda t: (t[0], t[1]))
 
     head2 = short_series(series) + (' · инвертор' if inverter else '')
