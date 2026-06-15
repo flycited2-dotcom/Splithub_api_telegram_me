@@ -17,8 +17,14 @@ from stock_report_bot.report import _fmt_price
 
 class SizeFromBtuTests(unittest.TestCase):
     def test_nominal_taken_as_is(self):
-        for n in (7, 9, 10, 12, 13, 14, 16, 18, 20, 22, 24, 25, 26, 27, 30, 36, 48, 60):
+        # реальные kBTU-размеры (не площади) — как есть
+        for n in (7, 9, 10, 12, 13, 14, 16, 18, 20, 22, 24, 26, 27, 36, 48):
             self.assertEqual(cc.size_from_btu(n), n, n)
+
+    def test_area_codes_mapped_to_size(self):
+        # числа-площади (м²) → типоразмер (kBTU), карта владельца
+        for area, size in ((25, 7), (30, 9), (35, 12), (50, 18), (60, 24), (70, 24)):
+            self.assertEqual(cc.size_from_btu(area), size, area)
 
     def test_legacy_full_btu_divided(self):
         self.assertEqual(cc.size_from_btu(9000), 9)

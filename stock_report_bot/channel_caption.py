@@ -19,9 +19,15 @@ import re
 from stock_report_bot.report import _fmt_price, _price_for
 from stock_report_bot.menu import marked_price, short_series, _TYPE_PREFIXES
 
-# Стандартные коды типоразмера в артикуле (как в apps/catalog/btu.py сайта).
+# Часть поставщиков кодирует модель ПЛОЩАДЬЮ помещения (м²), а не размером, и это число
+# попадает в btu_calc/артикул как есть (50 и 70 вообще не бывают kBTU → это точно площади).
+# Карта площадь(м²)→типоразмер (kBTU) от владельца. Применяется к итоговому числу.
+_AREA_TO_SIZE = {25: 7, 30: 9, 35: 12, 50: 18, 60: 24, 70: 24}
+
+# Стандартные коды типоразмера/площади в артикуле (база — apps/catalog/btu.py сайта,
+# + площади 50/70, которые поставщики пишут в названии).
 _CODE_RE = re.compile(
-    r'(?<!\d)(07|09|10|12|13|14|16|18|20|22|24|25|26|27|30|32|35|36|40|42|48|60)(?!\d)')
+    r'(?<!\d)(07|09|10|12|13|14|16|18|20|22|24|25|26|27|30|32|35|36|40|42|48|50|60|70)(?!\d)')
 
 
 def size_from_btu(btu):
@@ -30,7 +36,8 @@ def size_from_btu(btu):
     `btu_calc` сайта — УЖЕ готовый номинал в kBTU (7/9/10/12/13/14/16/18/20/22/24/25/26/
     27/30/32/35/36/40/42/48/60): сайт сам округляет к стандарту (apps/catalog/btu.py).
     Поэтому берём значение КАК ЕСТЬ, без повторного снапа (иначе 10→9, 14→12 и дубли).
-    Подстраховка: если прилетело в полных BTU (9000) — делим на 1000. None — если нет/мусор."""
+    Подстраховка: полные BTU (9000) → /1000; число-площадь (25/30/35/50/60/70) → размер.
+    None — если нет/мусор."""
     try:
         v = float(btu)
     except (TypeError, ValueError):
@@ -40,7 +47,9 @@ def size_from_btu(btu):
     if v > 200:           # на всякий случай: значение в полных BTU → в kBTU
         v = v / 1000.0
     n = int(round(v))
-    return n if 1 <= n <= 200 else None
+    if not 1 <= n <= 200:
+        return None
+    return _AREA_TO_SIZE.get(n, n)
 
 
 def _model_code(row, brand):
@@ -62,9 +71,12 @@ def _model_code(row, brand):
 
 
 def _size_from_code(code):
-    """Размер из кода модели/артикула (BSO-07HN8 → 7). None, если кода нет."""
+    """Размер из кода модели/артикула (BSO-07HN8 → 7; число-площадь → размер). None — нет кода."""
     m = _CODE_RE.search(code or '')
-    return int(m.group(1)) if m else None
+    if not m:
+        return None
+    s = int(m.group(1))
+    return _AREA_TO_SIZE.get(s, s)
 
 
 def _by_number(rows):
