@@ -22,9 +22,17 @@ class SizeFromBtuTests(unittest.TestCase):
             self.assertEqual(cc.size_from_btu(n), n, n)
 
     def test_area_codes_mapped_to_size(self):
-        # числа-площади (м²) → типоразмер (kBTU), карта владельца
+        # числа-площади (м²) → типоразмер (kBTU), карта владельца (бытовые)
         for area, size in ((25, 7), (30, 9), (35, 12), (50, 18), (60, 24), (70, 24)):
-            self.assertEqual(cc.size_from_btu(area), size, area)
+            self.assertEqual(cc.size_from_btu(area, category_id=2), size, area)
+
+    def test_semi_industrial_keeps_real_btu(self):
+        # полупром (кат. 6): 60 = реальные 60 000 BTU, площадей не применяем
+        self.assertEqual(cc.size_from_btu(60, category_id=6), 60)
+        self.assertEqual(cc.size_from_btu(36, category_id=6), 36)
+        self.assertEqual(cc.size_from_btu(48, category_id=6), 48)
+        # бытовые: то же число 60 трактуем как площадь → 24
+        self.assertEqual(cc.size_from_btu(60, category_id=2), 24)
 
     def test_legacy_full_btu_divided(self):
         self.assertEqual(cc.size_from_btu(9000), 9)
@@ -35,8 +43,8 @@ class SizeFromBtuTests(unittest.TestCase):
             self.assertIsNone(cc.size_from_btu(v), v)
 
 
-def _pos(btu, price, title='Model', source='daichi'):
-    return {'source': source, 'nc_code': None, 'btu_calc': btu,
+def _pos(btu, price, title='Model', source='daichi', category_id=2):
+    return {'source': source, 'nc_code': None, 'btu_calc': btu, 'category_id': category_id,
             'price_wholesale': price, 'price_base': None, 'title': title}
 
 
@@ -86,6 +94,16 @@ class BuildCaptionTests(unittest.TestCase):
         self.assertIn('BetaUnit', cap)
         self.assertIn(_fmt_price(marked_price(40000, 0)), cap)
         self.assertIn(_fmt_price(marked_price(50000, 0)), cap)   # обе показаны, не схлопнуты
+
+    def test_semi_industrial_series_keeps_sizes(self):
+        # Полупром (кат. 6): 36/48/60 — реальные размеры, не превращаются в площади.
+        positions = [_pos(36, 80000, category_id=6), _pos(48, 95000, category_id=6),
+                     _pos(60, 120000, category_id=6)]
+        cap = cc.build_channel_caption(positions, 0, 'Daichi', 'DA-DT', 'daichi')
+        body = cap.split('──')[-1]
+        for n in ('36', '48', '60'):
+            self.assertIn(n, body)
+        self.assertNotIn('24 —', body)        # 60 НЕ стало 24 (это полупром)
 
     def test_inverter_header_toggle(self):
         on = cc.build_channel_caption([_pos(9, 40000)], 5, 'X', 'Y', 'daichi', inverter=True)
