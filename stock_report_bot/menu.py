@@ -18,8 +18,8 @@ from stock_report_bot.report import (
 )
 
 # Порядок поставщиков в меню и их 1-символьные коды для callback_data.
-SUPPLIER_ORDER = ['breeze', 'rusklimat', 'daichi']
-SRC_CODE = {'breeze': 'b', 'rusklimat': 'r', 'daichi': 'd'}
+SUPPLIER_ORDER = ['breeze', 'rusklimat', 'daichi', 'jac']
+SRC_CODE = {'breeze': 'b', 'rusklimat': 'r', 'daichi': 'd', 'jac': 'j'}
 CODE_SRC = {v: k for k, v in SRC_CODE.items()}
 
 MARKUP_PCTS = list(range(1, 11))   # наценка к опту: +1..+10 %
@@ -248,13 +248,17 @@ def text_specs_choice(brand, series, pct):
 
 
 # ── итоговый список с наценкой ─────────────────────────────────────────────
-def build_priced_message(rows, source, brand, series, pct, breez_base=None, extra_block=None):
+def build_priced_message(rows, source, brand, series, pct, breez_base=None,
+                         extra_block=None, spec_lines=None):
     """Текст сообщения со списком позиций серии в наличии: опт × (1+pct%) → …90.
 
     Шапка — только 2 эмодзи (🏷 + квадрат поставщика): сообщение готово к пересылке
     клиенту, поставщик и величина наценки/скидки в нём НЕ раскрываются.
-    `extra_block` (блок характеристик из specs.build_specs_block) — если задан,
-    добавляется в КОНЕЦ как единый блок, чтобы прилететь одним сообщением с фото/списком."""
+    `extra_block` (блок характеристик из specs.build_specs_block, для Бриз/Daichi/
+    Русклимата) — если задан, добавляется в КОНЕЦ как единый блок, чтобы прилететь
+    одним сообщением с фото/списком.
+    `spec_lines` ({артикул: компактные ТТХ}, для JAC) — подпись под каждой позицией."""
+    spec_lines = spec_lines or {}
     emoji = SUPPLIER_EMOJI.get(source, '▫️')
     head = f'🏷 {emoji}'
     lines = [head, '']
@@ -263,9 +267,14 @@ def build_priced_message(rows, source, brand, series, pct, breez_base=None, extr
         opt = _price_for(r, breez_base)
         price = marked_price(opt, pct)
         b = html.escape((r.get('brand') or '').strip())
+        ser = html.escape((r.get('series') or '').strip())
         name = html.escape(r.get('title') or '')
         head_b = f'<b>{b}</b> ' if b else ''
-        lines.append(f'• {head_b}{name} — {_fmt_price(price)} — {_qty_for(r)} шт.')
+        ser_p = f'{ser} · ' if ser and r.get('source') == 'jac' else ''   # серия только у JAC
+        lines.append(f'• {head_b}{ser_p}{name} — {_fmt_price(price)} — {_qty_for(r)} шт.')
+        spec = spec_lines.get(r.get('title') or '')
+        if spec:
+            lines.append(f'   <i>{html.escape(spec)}</i>')
     if not items:
         lines.append('Нет позиций в наличии.')
     if extra_block:
