@@ -7,7 +7,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from stock_report_bot.jac import map_rows, load_jac_rows
-from stock_report_bot.report import build_report_chunks
+from stock_report_bot.report import build_report_chunks, _price_for
+from stock_report_bot import menu
 
 
 def _p(article, category, price, crimea, holod='2.2', name=None):
@@ -69,6 +70,38 @@ class JacAdapterTests(unittest.TestCase):
         self.assertIn('🟨 <b>JAC</b>', text)
         self.assertIn('EKSA-20HN — 12 360 ₽ — 5 шт.', text)
         self.assertIn('MDSP-12 — 45 000 ₽ — 100 шт.', text)
+
+
+class JacMenuTests(unittest.TestCase):
+    def _rows(self):
+        d1 = _p('MDSAG-09HRN8', 'Бытовые сплит-системы', 18000.0, '5')
+        d1['brand'], d1['series'] = 'MDV', 'CLASSIC INVERTER'
+        d2 = _p('EKSF-25HNS', 'Бытовые сплит-системы', 20640.0, '2')
+        d2['brand'], d2['series'] = 'EUROKLIMAT', 'Futura'
+        return map_rows([d1, d2])
+
+    def test_jac_registered_as_source(self):
+        self.assertIn('jac', menu.SUPPLIER_ORDER)
+        self.assertEqual(menu.SRC_CODE['jac'], 'j')
+        self.assertEqual(menu.CODE_SRC['j'], 'jac')
+
+    def test_jac_hierarchy_and_marked_price(self):
+        rows = self._rows()
+        self.assertIn('jac', menu.suppliers_present(rows))
+        self.assertEqual(menu.brands_for(rows, 'jac'), ['EUROKLIMAT', 'MDV'])
+        self.assertEqual(menu.series_for(rows, 'jac', 'MDV'), ['CLASSIC INVERTER'])
+        pos = menu.positions_for(rows, 'jac', 'MDV', 'CLASSIC INVERTER')
+        self.assertEqual(len(pos), 1)
+        opt = _price_for(pos[0], None)          # JAC: опт = «Ваша цена»
+        self.assertEqual(opt, 18000.0)
+        self.assertEqual(menu.marked_price(opt, 5), 18990)   # 18900 → …90
+
+    def test_jac_priced_message(self):
+        rows = self._rows()
+        chunks = menu.build_priced_message(rows, 'jac', 'MDV', 'CLASSIC INVERTER', 5)
+        text = '\n'.join(chunks)
+        self.assertIn('MDSAG-09HRN8', text)
+        self.assertIn('18 990 ₽', text)
 
 
 if __name__ == '__main__':

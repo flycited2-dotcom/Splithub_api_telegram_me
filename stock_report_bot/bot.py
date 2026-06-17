@@ -14,6 +14,7 @@ import time
 from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID
 from stock_report_bot.breez import fetch_breez_base_by_nc
 from stock_report_bot.db import fetch_stock_rows
+from stock_report_bot.jac import load_jac_rows
 from stock_report_bot import menu
 from stock_report_bot.telegram import (
     answer_callback_query, edit_message_text, get_updates, send_message, send_photo,
@@ -30,7 +31,7 @@ _cache = {'rows': (0, None), 'breez': (0, None)}
 def _rows():
     ts, val = _cache['rows']
     if val is None or time.time() - ts > _ROWS_TTL:
-        val = fetch_stock_rows()
+        val = fetch_stock_rows() + load_jac_rows()   # + 4-й поставщик JAC из файла
         _cache['rows'] = (time.time(), val)
     return val
 

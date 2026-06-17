@@ -11,14 +11,15 @@ callback_data компактный, без внешнего стора (пере
 пере-выводимых из снапшота остатков при каждом нажатии. Действие — первое поле.
 """
 import html
+import re
 
 from stock_report_bot.report import (
     SUPPLIER_EMOJI, _chunk_lines, _fmt_price, _price_for, _qty_for, _supplier_label,
 )
 
 # Порядок поставщиков в меню и их 1-символьные коды для callback_data.
-SUPPLIER_ORDER = ['breeze', 'rusklimat', 'daichi']
-SRC_CODE = {'breeze': 'b', 'rusklimat': 'r', 'daichi': 'd'}
+SUPPLIER_ORDER = ['breeze', 'rusklimat', 'daichi', 'jac']
+SRC_CODE = {'breeze': 'b', 'rusklimat': 'r', 'daichi': 'd', 'jac': 'j'}
 CODE_SRC = {v: k for k, v in SRC_CODE.items()}
 
 MARKUP_PCTS = list(range(1, 11))   # наценка к опту: +1..+10 %

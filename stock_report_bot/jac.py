@@ -108,7 +108,7 @@ def map_rows(data):
             'nc_code': None,
             'brand': (p.get('brand') or '').strip(),
             'title': title,
-            'series': '',
+            'series': (p.get('series') or '').strip(),   # из пути категории
             'price_wholesale': p.get('price'),   # «Ваша цена» = опт
             'price_base': None,
             'crimea_qty': qty,
