@@ -3,9 +3,9 @@ import html
 from datetime import date
 from itertools import groupby
 
-SUPPLIER_LABELS = {'rusklimat': 'Русклимат', 'breeze': 'Бриз', 'daichi': 'Daichi'}
+SUPPLIER_LABELS = {'rusklimat': 'Русклимат', 'breeze': 'Бриз', 'daichi': 'Daichi', 'jac': 'JAC'}
 # Свой эмодзи у каждого поставщика — чтобы блоки различались с одного взгляда.
-SUPPLIER_EMOJI = {'rusklimat': '🟦', 'daichi': '🟥', 'breeze': '🟩'}
+SUPPLIER_EMOJI = {'rusklimat': '🟦', 'daichi': '🟥', 'breeze': '🟩', 'jac': '🟨'}
 
 # Бриз: опт (base) берётся из Бриз API по nc_code — в БД у него розница.
 BREEZE_SOURCE = 'breeze'

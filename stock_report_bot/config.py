@@ -27,3 +27,7 @@ TELEGRAM_API_URL = config('TELEGRAM_API_URL', default='https://api.telegram.org'
 # что в /opt/oasis/.env сайта (BREEZ_AUTH_HEADER). Пусто → опт Бриза = цена из БД.
 BREEZ_BASE_URL = config('BREEZ_BASE_URL', default='https://api.breez.ru/v1/')
 BREEZ_AUTH_HEADER = config('BREEZ_AUTH_HEADER', default='')
+
+# JAC — 4-й поставщик без API. Путь к JSON, который пишет скрапер b2b-jac.com
+# (проект osatakti_mdv_b2b, файл jac_stock_latest.json). Пусто → JAC не включается.
+JAC_STOCK_JSON = config('JAC_STOCK_JSON', default='')
