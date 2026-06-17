@@ -1,4 +1,4 @@
-"""Разовая отправка ТЕСТА JAC себе в Telegram (остатки + меню наценки с ТТХ).
+r"""Разовая отправка ТЕСТА JAC себе в Telegram (остатки + меню наценки с ТТХ).
 
 Запуск (из папки проекта бота):
     .\.venv\Scripts\python send_jac_test.py
@@ -44,7 +44,7 @@ def main():
 
     sys.path.insert(0, str(ROOT))
     from stock_report_bot.jac import load_jac_rows
-    from stock_report_bot.specs import load_specs, spec_lines_for
+    from stock_report_bot.jac_specs import load_specs, spec_lines_for
     from stock_report_bot.report import build_report_chunks
     from stock_report_bot import menu
 
@@ -88,7 +88,7 @@ def main():
         s0 = menu.series_for(rows, "jac", "THAICON")[0]
         items = menu.positions_for(rows, "jac", "THAICON", s0)
         sl = spec_lines_for(specs, [r["title"] for r in items])
-        for ch in menu.build_priced_message(rows, "jac", "THAICON", s0, a.markup, None, sl):
+        for ch in menu.build_priced_message(rows, "jac", "THAICON", s0, a.markup, None, spec_lines=sl):
             head = f"🧪 <b>ТЕСТ</b> — меню наценки +{a.markup}% с характеристиками\n\n"
             print("  B", send(head + ch))
             time.sleep(1.3)
