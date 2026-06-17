@@ -102,6 +102,17 @@ class JacMenuTests(unittest.TestCase):
         text = '\n'.join(chunks)
         self.assertIn('MDSAG-09HRN8', text)
         self.assertIn('18 990 ₽', text)
+        self.assertIn('CLASSIC INVERTER · MDSAG-09HRN8', text)   # серия рядом с моделью
+
+    def test_series_shown_only_for_jac_in_report(self):
+        from stock_report_bot.report import build_report_chunks
+        jac = self._rows()[0]                       # source=jac, серия есть
+        other = {'source': 'daichi', 'brand': 'Kentatsu',
+                 'series': 'Kanami', 'title': 'Kentatsu Kanami KSGAA35',
+                 'price_wholesale': 27000, 'price_base': None, 'crimea_qty': 3, 'nc_code': None}
+        text = '\n'.join(build_report_chunks([jac, other]))
+        self.assertIn('CLASSIC INVERTER · MDSAG-09HRN8', text)   # JAC — с серией
+        self.assertIn('<b>Kentatsu</b> Kentatsu Kanami KSGAA35', text)  # Daichi — без дубля серии
 
 
 if __name__ == '__main__':

@@ -221,9 +221,11 @@ def build_priced_message(rows, source, brand, series, pct, breez_base=None, spec
         opt = _price_for(r, breez_base)
         price = marked_price(opt, pct)
         b = html.escape((r.get('brand') or '').strip())
+        ser = html.escape((r.get('series') or '').strip())
         name = html.escape(r.get('title') or '')
         head_b = f'<b>{b}</b> ' if b else ''
-        lines.append(f'• {head_b}{name} — {_fmt_price(price)} — {_qty_for(r)} шт.')
+        ser_p = f'{ser} · ' if ser and r.get('source') == 'jac' else ''   # серия только у JAC
+        lines.append(f'• {head_b}{ser_p}{name} — {_fmt_price(price)} — {_qty_for(r)} шт.')
         spec = spec_lines.get(r.get('title') or '')
         if spec:
             lines.append(f'   <i>{html.escape(spec)}</i>')

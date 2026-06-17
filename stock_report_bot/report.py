@@ -57,12 +57,16 @@ def _price_for(row, breez_base):
 
 
 def _product_line(row, breez_base):
-    """`• <b>Бренд</b> Наименование — опт-цена ₽ — N шт.` Бренд жирным и впереди,
-    т.к. в title он есть не всегда."""
+    """`• <b>Бренд</b> Серия · Наименование — опт-цена ₽ — N шт.` Бренд жирным и
+    впереди (в title его часто нет); серия — если известна."""
     brand = html.escape((row.get('brand') or '').strip())
+    series = html.escape((row.get('series') or '').strip())
     name = html.escape(row['title'] or '')
     head = f'<b>{brand}</b> ' if brand else ''
-    return f'• {head}{name} — {_fmt_price(_price_for(row, breez_base))} — {_qty_for(row)} шт.'
+    # серию показываем только у JAC: там title — голый код модели; у остальных
+    # поставщиков серия уже входит в title (не дублируем).
+    ser = f'{series} · ' if series and row.get('source') == 'jac' else ''
+    return f'• {head}{ser}{name} — {_fmt_price(_price_for(row, breez_base))} — {_qty_for(row)} шт.'
 
 
 def _chunk_lines(lines, max_len):
