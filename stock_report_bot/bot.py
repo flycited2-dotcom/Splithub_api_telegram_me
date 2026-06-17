@@ -15,6 +15,7 @@ from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID
 from stock_report_bot.breez import fetch_breez_base_by_nc
 from stock_report_bot.db import fetch_stock_rows
 from stock_report_bot.jac import load_jac_rows
+from stock_report_bot.specs import load_specs, spec_lines_for
 from stock_report_bot import menu
 from stock_report_bot.telegram import (
     answer_callback_query, edit_message_text, get_updates, send_message, send_photo,
@@ -25,7 +26,8 @@ logger = logging.getLogger('stock_report_bot.bot')
 
 _ROWS_TTL = 120      # снапшот остатков
 _BREEZ_TTL = 300     # опт Бриза из API
-_cache = {'rows': (0, None), 'breez': (0, None)}
+_SPECS_TTL = 3600    # ТТХ JAC (меняются редко)
+_cache = {'rows': (0, None), 'breez': (0, None), 'specs': (0, None)}
 
 
 def _rows():
@@ -41,6 +43,14 @@ def _breez_base():
     if val is None or time.time() - ts > _BREEZ_TTL:
         val = fetch_breez_base_by_nc()
         _cache['breez'] = (time.time(), val)
+    return val
+
+
+def _specs():
+    ts, val = _cache['specs']
+    if val is None or time.time() - ts > _SPECS_TTL:
+        val = load_specs()
+        _cache['specs'] = (time.time(), val)
     return val
 
 
@@ -113,7 +123,12 @@ def _handle_callback(cb):
             code, bidx, sidx, pct = parts[1], int(parts[2]), int(parts[3]), int(parts[4])
             source, brand, series = _resolve(rows, code, bidx, sidx)
             breez_base = _breez_base() if source == 'breeze' else None
-            chunks = menu.build_priced_message(rows, source, brand, series, pct, breez_base)
+            spec_lines = None
+            if source == 'jac':                  # компактные ТТХ под каждой моделью
+                items = menu.positions_for(rows, source, brand, series)
+                spec_lines = spec_lines_for(_specs(), [r.get('title') for r in items])
+            chunks = menu.build_priced_message(rows, source, brand, series, pct,
+                                               breez_base, spec_lines)
             image_url = menu.series_image(rows, source, brand, series)
             _send_result(chat_id, chunks, image_url)
         answer_callback_query(cq_id)

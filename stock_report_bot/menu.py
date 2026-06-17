@@ -206,11 +206,13 @@ def text_markup(source, brand, series):
 
 
 # ── итоговый список с наценкой ─────────────────────────────────────────────
-def build_priced_message(rows, source, brand, series, pct, breez_base=None):
+def build_priced_message(rows, source, brand, series, pct, breez_base=None, spec_lines=None):
     """Текст сообщения со списком позиций серии в наличии: опт × (1+pct%) → …90.
 
     Шапка — только 2 эмодзи (🏷 + квадрат поставщика): сообщение готово к пересылке
-    клиенту, поставщик и величина наценки/скидки в нём НЕ раскрываются."""
+    клиенту, поставщик и величина наценки/скидки в нём НЕ раскрываются.
+    spec_lines: {артикул: компактные ТТХ} — подпись под позицией (для JAC)."""
+    spec_lines = spec_lines or {}
     emoji = SUPPLIER_EMOJI.get(source, '▫️')
     head = f'🏷 {emoji}'
     lines = [head, '']
@@ -222,6 +224,9 @@ def build_priced_message(rows, source, brand, series, pct, breez_base=None):
         name = html.escape(r.get('title') or '')
         head_b = f'<b>{b}</b> ' if b else ''
         lines.append(f'• {head_b}{name} — {_fmt_price(price)} — {_qty_for(r)} шт.')
+        spec = spec_lines.get(r.get('title') or '')
+        if spec:
+            lines.append(f'   <i>{html.escape(spec)}</i>')
     if not items:
         lines.append('Нет позиций в наличии.')
     return _chunk_lines(lines, 3900)

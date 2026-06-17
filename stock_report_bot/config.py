@@ -31,3 +31,6 @@ BREEZ_AUTH_HEADER = config('BREEZ_AUTH_HEADER', default='')
 # JAC — 4-й поставщик без API. Путь к JSON, который пишет скрапер b2b-jac.com
 # (проект osatakti_mdv_b2b, файл jac_stock_latest.json). Пусто → JAC не включается.
 JAC_STOCK_JSON = config('JAC_STOCK_JSON', default='')
+# ТТХ карточек JAC (jac_specs_latest.json, команда `specs` скрапера). Пусто →
+# меню/отчёт работают без характеристик.
+JAC_SPECS_JSON = config('JAC_SPECS_JSON', default='')
