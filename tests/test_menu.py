@@ -5,7 +5,7 @@ from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from stock_report_bot import menu
+from stock_report_bot import menu, report
 
 
 def _row(source, title, price, crimea, brand=None, series=None, nc_code=None,
@@ -163,6 +163,24 @@ class BuildMessageTests(unittest.TestCase):
         self.assertEqual(len(chunks), 1)                 # список + характеристики одним сообщением
         self.assertIn('27 790 ₽', text)                  # список
         self.assertIn('<blockquote>❄️ Инверторная технология</blockquote>', text)  # цитата не разорвана
+
+    def test_thin_divider_between_models(self):
+        rows = [_row('daichi', 'Kentatsu Kanami A', Decimal('100'), 2,
+                     brand='Kentatsu', series='Kanami'),
+                _row('daichi', 'Kentatsu Kanami B', Decimal('200'), 3,
+                     brand='Kentatsu', series='Kanami')]
+        text = '\n'.join(menu.build_priced_message(rows, 'daichi', 'Kentatsu', 'Kanami', 5))
+        # тонкая полоса между двумя моделями — ровно одна (не после последней)
+        self.assertEqual(text.count(report.ITEM_DIVIDER), 1)
+
+    def test_double_divider_before_extra_block(self):
+        rows = [_row('daichi', 'Kentatsu Kanami KSGAA35', Decimal('26404'), 12,
+                     brand='Kentatsu', series='Kanami')]
+        block = '💡 Kentatsu Kanami — ключевые особенности:\n<blockquote>x</blockquote>'
+        text = '\n'.join(menu.build_priced_message(rows, 'daichi', 'Kentatsu', 'Kanami', 5,
+                                                   extra_block=block))
+        self.assertIn(report.BRAND_DIVIDER, text)                    # двойная есть
+        self.assertLess(text.index(report.BRAND_DIVIDER), text.index('💡'))  # перед блоком
 
 
 class SpecsChoiceTests(unittest.TestCase):

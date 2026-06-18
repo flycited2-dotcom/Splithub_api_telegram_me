@@ -15,6 +15,8 @@ import time
 from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID
 from stock_report_bot.breez import fetch_breez_base_by_nc, fetch_breez_utp_by_nc
 from stock_report_bot.db import fetch_stock_rows, fetch_tech_values
+from stock_report_bot.jac import load_jac_rows
+from stock_report_bot.jac_utp import load_utp, utp_for, build_utp_block
 from stock_report_bot import menu, specs, fotogen_bridge, channel_caption
 from stock_report_bot.telegram import (
     answer_callback_query, edit_message_text, get_updates, send_message, send_photo,
@@ -27,13 +29,14 @@ logger = logging.getLogger('stock_report_bot.bot')
 _ROWS_TTL = 120      # снапшот остатков
 _BREEZ_TTL = 300     # опт Бриза из API
 _UTP_TTL = 1800      # УТП Бриза из API (меняется редко — держим дольше)
-_cache = {'rows': (0, None), 'breez': (0, None), 'utp': (0, None)}
+_JAC_UTP_TTL = 3600  # УТП JAC из файла скрапера (меняются редко)
+_cache = {'rows': (0, None), 'breez': (0, None), 'utp': (0, None), 'jac_utp': (0, None)}
 
 
 def _rows():
     ts, val = _cache['rows']
     if val is None or time.time() - ts > _ROWS_TTL:
-        val = fetch_stock_rows()
+        val = fetch_stock_rows() + load_jac_rows()   # + 4-й поставщик JAC из файла
         _cache['rows'] = (time.time(), val)
     return val
 
@@ -51,6 +54,14 @@ def _breez_utp():
     if val is None or time.time() - ts > _UTP_TTL:
         val = fetch_breez_utp_by_nc()
         _cache['utp'] = (time.time(), val)
+    return val
+
+
+def _jac_utp():
+    ts, val = _cache['jac_utp']
+    if val is None or time.time() - ts > _JAC_UTP_TTL:
+        val = load_utp()
+        _cache['jac_utp'] = (time.time(), val)
     return val
 
 
@@ -131,17 +142,23 @@ def _handle_callback(cb):
             breez_base = _breez_base() if source == 'breeze' else None
             extra_block = None
             if action == 'gs':
-                positions = menu.positions_for(rows, source, brand, series)
-                nc_codes = [r.get('nc_code') for r in positions if r.get('nc_code')]
-                titles = [r.get('title') for r in positions]
-                utp_raw = None
-                if source == 'breeze':
-                    utp_map = _breez_utp()
-                    utp_raw = next((utp_map.get(nc) for nc in nc_codes if utp_map.get(nc)), None)
-                extra_block = specs.build_specs_block(
-                    fetch_tech_values(nc_codes), brand, menu.short_series(series),
-                    source, utp_raw, titles)
-            chunks = menu.build_priced_message(rows, source, brand, series, pct, breez_base, extra_block)
+                if source == 'jac':
+                    # JAC нет в БД сайта — блок «птички»-УТП серии из файла скрапера.
+                    extra_block = build_utp_block(brand, menu.short_series(series),
+                                                  utp_for(_jac_utp(), brand, series))
+                else:
+                    positions = menu.positions_for(rows, source, brand, series)
+                    nc_codes = [r.get('nc_code') for r in positions if r.get('nc_code')]
+                    titles = [r.get('title') for r in positions]
+                    utp_raw = None
+                    if source == 'breeze':
+                        utp_map = _breez_utp()
+                        utp_raw = next((utp_map.get(nc) for nc in nc_codes if utp_map.get(nc)), None)
+                    extra_block = specs.build_specs_block(
+                        fetch_tech_values(nc_codes), brand, menu.short_series(series),
+                        source, utp_raw, titles)
+            chunks = menu.build_priced_message(rows, source, brand, series, pct, breez_base,
+                                               extra_block=extra_block)
             image_url = menu.series_image(rows, source, brand, series)
             _send_result(chat_id, chunks, image_url)
         elif action == 'c':                       # c|code|bidx|sidx|pct — карточка в фотоген-агент
