@@ -34,3 +34,6 @@ JAC_STOCK_JSON = config('JAC_STOCK_JSON', default='')
 # ТТХ карточек JAC (jac_specs_latest.json, команда `specs` скрапера). Пусто →
 # меню/отчёт работают без характеристик.
 JAC_SPECS_JSON = config('JAC_SPECS_JSON', default='')
+# УТП серий JAC (jac_utp_latest.json — отобранные владельцем преимущества по сериям).
+# Пусто → меню работает без блока УТП.
+JAC_UTP_JSON = config('JAC_UTP_JSON', default='')

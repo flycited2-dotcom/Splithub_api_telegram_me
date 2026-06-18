@@ -14,7 +14,8 @@ import html
 import re
 
 from stock_report_bot.report import (
-    SUPPLIER_EMOJI, _chunk_lines, _fmt_price, _price_for, _qty_for, _supplier_label,
+    BRAND_DIVIDER, ITEM_DIVIDER, SUPPLIER_EMOJI, _chunk_lines, _fmt_price, _price_for,
+    _qty_for, _supplier_label,
 )
 
 # Порядок поставщиков в меню и их 1-символьные коды для callback_data.
@@ -263,7 +264,7 @@ def build_priced_message(rows, source, brand, series, pct, breez_base=None,
     head = f'🏷 {emoji}'
     lines = [head, '']
     items = positions_for(rows, source, brand, series)
-    for r in items:
+    for i, r in enumerate(items):
         opt = _price_for(r, breez_base)
         price = marked_price(opt, pct)
         b = html.escape((r.get('brand') or '').strip())
@@ -275,8 +276,12 @@ def build_priced_message(rows, source, brand, series, pct, breez_base=None,
         spec = spec_lines.get(r.get('title') or '')
         if spec:
             lines.append(f'   <i>{html.escape(spec)}</i>')
+        if i < len(items) - 1:
+            lines.append(ITEM_DIVIDER)   # тонкая полоса между моделями (как в отчёте)
     if not items:
         lines.append('Нет позиций в наличии.')
     if extra_block:
-        lines += ['', extra_block]   # extra_block — одна «строка» с \n: _chunk_lines не рвёт цитату
+        # двойная полоса-граница серии + блок особенностей; extra_block — одна «строка»
+        # с \n внутри: _chunk_lines не рвёт цитату.
+        lines += [BRAND_DIVIDER, extra_block]
     return _chunk_lines(lines, 3900)
