@@ -43,3 +43,6 @@ JAC_SPECS_JSON = config('JAC_SPECS_JSON', default='')
 # УТП серий JAC (jac_utp_latest.json — отобранные владельцем преимущества по сериям).
 # Пусто → меню работает без блока УТП.
 JAC_UTP_JSON = config('JAC_UTP_JSON', default='')
+# Фото серий JAC (jac_photos_latest.json: {бренд:{серия: URL|имя_файла}}). Локальные
+# файлы (THAICON) — в подпапке photos/ рядом. Пусто → карточка JAC без фото.
+JAC_PHOTOS_JSON = config('JAC_PHOTOS_JSON', default='')

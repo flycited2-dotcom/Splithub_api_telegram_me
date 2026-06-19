@@ -36,16 +36,20 @@ def submit_card(photo_url, brand, model, specs_lines, chat_id, caption=''):
         return False, 'FOTOGEN_API_URL или FOTOGEN_API_TOKEN не задан в .env'
 
     try:
-        r = requests.get(
-            photo_url,
-            headers={'User-Agent': 'SplithubStockBot/1.0'},
-            timeout=_TIMEOUT,
-        )
-        r.raise_for_status()
-        photo_bytes = r.content
+        if photo_url.startswith('http://') or photo_url.startswith('https://'):
+            r = requests.get(
+                photo_url,
+                headers={'User-Agent': 'SplithubStockBot/1.0'},
+                timeout=_TIMEOUT,
+            )
+            r.raise_for_status()
+            photo_bytes = r.content
+        else:
+            with open(photo_url, 'rb') as f:   # локальный файл (напр. THAICON)
+                photo_bytes = f.read()
     except Exception as exc:
-        log.warning('submit_card: не удалось скачать фото %s: %s', photo_url, exc)
-        return False, f'Не удалось скачать фото товара: {exc}'
+        log.warning('submit_card: не удалось получить фото %s: %s', photo_url, exc)
+        return False, f'Не удалось получить фото товара: {exc}'
 
     specs_text = '\n'.join(specs_lines) if specs_lines else ''
     fname = f"{brand}_{model}.jpg".replace(' ', '_')
