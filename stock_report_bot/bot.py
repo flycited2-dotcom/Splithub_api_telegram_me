@@ -12,6 +12,8 @@ import html
 import logging
 import time
 
+import psycopg2
+
 from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID
 from stock_report_bot.breez import fetch_breez_base_by_nc, fetch_breez_utp_by_nc
 from stock_report_bot.db import fetch_stock_rows, fetch_tech_values
@@ -260,6 +262,13 @@ def run():
                     _handle_callback(upd['callback_query'])
                 elif 'message' in upd:
                     _handle_message(upd['message'])
+            except psycopg2.OperationalError:
+                # БД сайта недоступна — обычно у контейнера oasis-db-1 сменился IP после
+                # пересоздания стека сайта, а долгоживущий бот держит старый IP (в отличие
+                # от суточного отчёта, который резолвит IP каждый запуск). Выходим: systemd
+                # (Restart=always) перезапустит, run_bot.sh пере-резолвит текущий IP — самолечение.
+                logger.error('БД недоступна — выход для авто-рестарта (пере-резолв IP БД)')
+                raise SystemExit(1)
             except Exception as exc:
                 logger.exception('ошибка обработки update: %s', exc)
 
