@@ -128,6 +128,10 @@ def _normalize_row(row: dict[str, object], breez_base: dict[str, float]) -> dict
         "delivery_days": None,
         "category": str(row.get("category_id") or "климатическая техника"),
         "product_url": "",
+        # Фотография товара с сайта поставщика: в БД сайта лежит первый снимок
+        # карточки (catalog_productimage, order=0). Тендерному агенту она нужна
+        # не меньше цены — площадка принимает картинку ссылкой.
+        "image_url": str(row.get("image_url") or ""),
         "specs": {
             "cooling_capacity_hint": row.get("btu_calc"),
             "series": series,
@@ -168,6 +172,7 @@ def _api_product(row: dict[str, object]) -> dict[str, object]:
         "category": str(row.get("category") or "климатическая техника"),
         "description": f"{supplier}; склад {row.get('warehouse') or 'не указан'}; остаток {quantity}",
         "productUrl": str(row.get("product_url") or ""),
+        "imageUrl": str(row.get("image_url") or ""),
         "updatedAt": datetime.now(timezone.utc).isoformat(),
         "attributes": attributes,
         "specifications": specifications,

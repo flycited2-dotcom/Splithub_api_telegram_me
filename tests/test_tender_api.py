@@ -4,6 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from stock_report_bot import tender_api
 from stock_report_bot.tender_api import build_response, search_catalog
 
 
@@ -80,3 +81,28 @@ class TenderApiSearchTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ImageUrlTests(unittest.TestCase):
+    """Фотография должна доезжать до тендерного агента.
+
+    В БД сайта у 464 позиций из 489 есть снимок карточки, и площадка РТС
+    принимает его ссылкой — без этого поля пришлось бы искать фото заново.
+    """
+
+    def test_normalize_row_keeps_image_url(self):
+        row = {"source": "breeze", "brand": "ECOSTAR", "title": "Мобильный кондиционер",
+               "image_url": "https://images.breez.ru/catalog/a/b.png", "crimea_qty": 1,
+               "nc_code": "НС-1", "price_wholesale": 15290, "price_base": 15290}
+        self.assertEqual(
+            tender_api._normalize_row(row, {})["image_url"],
+            "https://images.breez.ru/catalog/a/b.png",
+        )
+
+    def test_api_product_exposes_image_url(self):
+        row = {"source": "breeze", "supplier_name": "Бриз", "sku": "НС-1",
+               "image_url": "https://images.breez.ru/catalog/a/b.png", "stock_quantity": 1}
+        self.assertEqual(
+            tender_api._api_product(row)["imageUrl"],
+            "https://images.breez.ru/catalog/a/b.png",
+        )
