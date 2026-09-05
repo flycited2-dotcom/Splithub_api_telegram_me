@@ -26,6 +26,11 @@ from stock_report_bot.report import SUPPLIER_LABELS, _price_for
 SEARCH_PATH = "/api/internal/tender-climate-products/search"
 MAX_BODY_BYTES = 64 * 1024
 MAX_LIMIT = 100
+
+#: Предел для полной выгрузки каталога. Поиск отдаёт сотню лучших совпадений,
+#: но тендерному агенту нужен весь срез: он раскладывает его в прайс-лист, а не
+#: показывает человеку. На 05.09.2026 в каталоге 542 позиции.
+MAX_CATALOG_LIMIT = 5000
 _TOKEN_RE = re.compile(r"[a-zа-яё0-9]+", re.IGNORECASE)
 _GENERIC_TOKENS = {
     "кондиционер", "кондиционеры", "сплит", "система", "системы",
@@ -87,13 +92,19 @@ def search_catalog(
 
 def build_response(payload: dict[str, object], rows: list[dict[str, object]]) -> dict[str, object]:
     query = " ".join(str(payload.get("query") or "").split()).strip()
-    if not query:
+    full = bool(payload.get("all"))
+    if not query and not full:
         raise ValueError("query is required")
     try:
-        limit = int(payload.get("limit") or 50)
+        limit = int(payload.get("limit") or (MAX_CATALOG_LIMIT if full else 50))
     except (TypeError, ValueError):
         raise ValueError("limit must be an integer") from None
-    products = search_catalog(rows, query, limit=limit)
+    if full:
+        # Весь каталог без ранжирования: тендерный агент раскладывает его в
+        # прайс-лист, и «сто лучших совпадений» ему бессмысленны.
+        products = rows[: max(1, min(limit, MAX_CATALOG_LIMIT))]
+    else:
+        products = search_catalog(rows, query, limit=limit)
     return {
         "ok": True,
         "query": query,

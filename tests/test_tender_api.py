@@ -106,3 +106,24 @@ class ImageUrlTests(unittest.TestCase):
             tender_api._api_product(row)["imageUrl"],
             "https://images.breez.ru/catalog/a/b.png",
         )
+
+
+class FullCatalogTests(unittest.TestCase):
+    """Тендерному агенту нужен весь срез, а не сто лучших совпадений.
+
+    Он раскладывает каталог в прайс-лист для площадки, где важна полнота:
+    пропущенная позиция — это товар, которого на витрине не будет.
+    """
+
+    def test_all_returns_every_row_without_query(self):
+        response = build_response({"all": True}, ROWS)
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["total"], len(ROWS))
+
+    def test_query_is_still_required_without_all(self):
+        with self.assertRaises(ValueError):
+            build_response({}, ROWS)
+
+    def test_all_respects_the_limit(self):
+        response = build_response({"all": True, "limit": 1}, ROWS)
+        self.assertEqual(response["total"], 1)
