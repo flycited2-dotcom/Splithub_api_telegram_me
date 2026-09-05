@@ -46,3 +46,10 @@ JAC_UTP_JSON = config('JAC_UTP_JSON', default='')
 # Фото серий JAC (jac_photos_latest.json: {бренд:{серия: URL|имя_файла}}). Локальные
 # файлы (THAICON) — в подпапке photos/ рядом. Пусто → карточка JAC без фото.
 JAC_PHOTOS_JSON = config('JAC_PHOTOS_JSON', default='')
+
+# Read-only API для тендерного агента. Отдельный токен, не связанный с Telegram
+# и исходными ключами поставщиков. По умолчанию слушает только localhost; наружу
+# публикуется через HTTPS reverse proxy на VPS.
+TENDER_CLIMATE_API_TOKEN = config('TENDER_CLIMATE_API_TOKEN', default='')
+TENDER_CLIMATE_API_HOST = config('TENDER_CLIMATE_API_HOST', default='127.0.0.1')
+TENDER_CLIMATE_API_PORT = config('TENDER_CLIMATE_API_PORT', default=8780, cast=int)
