@@ -1,0 +1,15 @@
+[Unit]
+Description=SplitHome read-only tender climate API
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/splithub_api_telegram
+EnvironmentFile=/opt/splithub_api_telegram/.env
+ExecStart=/opt/splithub_api_telegram/.venv/bin/python -m stock_report_bot.tender_api
+Restart=on-failure
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

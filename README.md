@@ -43,7 +43,21 @@ cp .env.example .env      # заполнить DB_PASSWORD и TELEGRAM_BOT_TOKEN
 ```bash
 python -m stock_report_bot.main        # собрать и отправить отчёт один раз (cron)
 python -m stock_report_bot.bot         # интерактивный бот меню (постоянный процесс)
+python -m stock_report_bot.tender_api  # read-only API для тендерного агента
 ```
+
+## Read-only API для тендерного агента
+
+Endpoint `POST /api/internal/tender-climate-products/search` объединяет текущие
+остатки Русклимата, Daichi, Бриза и JAC. Он использует отдельный
+`TENDER_CLIMATE_API_TOKEN`, не раскрывает ключи поставщиков и не содержит операций
+заказа или резерва. По умолчанию сервис слушает `127.0.0.1:8780`; на VPS его следует
+публиковать только через HTTPS reverse proxy.
+
+Примеры запуска находятся в `docs/splithub-tender-api.service.example` и
+`docs/nginx-tender-api.conf.example`. Порт `8780` не нужно открывать в firewall:
+nginx обращается к нему через localhost. Перед запуском создайте отдельный случайный
+токен длиной не менее 32 символов и сохраните его только в серверном `.env`.
 
 ## Интерактивное меню с наценкой
 
