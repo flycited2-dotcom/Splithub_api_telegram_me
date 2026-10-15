@@ -17,8 +17,9 @@ def payload(product, pct):
                   btu_calc=None,price_wholesale=r.get('purchase_price'),
                   price_base=r.get('purchase_price'),crimea_qty=r['quantity']) for r in rows]
     inverter=bool(re.search(r'\bинвертор|\binverter\b',' '.join(specs+[product.get('series',''),product['title']]),re.I))
-    caption=channel_caption.build_channel_caption(adapted,pct,product.get('brand',''),
-        product.get('series') or product.get('model') or product['title'],source,inverter=inverter)
+    caption=channel_caption.build_publication_caption(adapted,pct,product.get('brand',''),
+        product.get('series') or product.get('model') or product['title'],source,
+        inverter=inverter,specs_lines=specs)
     return dict(photo_url=photo,brand=product.get('brand',''),
         model=short_series(product.get('series') or product.get('model') or product['title']),
         specs_lines=specs,caption=caption)

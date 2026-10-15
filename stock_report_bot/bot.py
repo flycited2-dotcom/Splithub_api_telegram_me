@@ -225,9 +225,9 @@ def _handle_callback(cb):
             # Подпись-прайс для канала: цены по выбранной наценке pct (см. channel_caption).
             inverter = (any('нвертор' in (l or '').lower() for l in spec_lines)
                         or 'нвертор' in (series or '').lower())
-            caption = channel_caption.build_channel_caption(
+            caption = channel_caption.build_publication_caption(
                 positions, pct, brand, series, source,
-                breez_base=breez_base, inverter=inverter)
+                breez_base=breez_base, inverter=inverter, specs_lines=spec_lines)
             if not photo_url:
                 edit_message_text(chat_id, message_id,
                     '⚠️ Фото товара не найдено в базе. Загрузите фото вручную в фотоген-боте.',

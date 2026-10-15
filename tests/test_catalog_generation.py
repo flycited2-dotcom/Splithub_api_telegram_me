@@ -12,6 +12,40 @@ def sample(model='RC-VN22HN'):
         specs=[{'title':'Класс энергоэффективности','value':'A'}],utp='',warehouse='Бриз Крым',updated_at='2026-10-16')
 
 class GenerationTest(unittest.TestCase):
+    def test_photo_caption_has_price_before_verified_features(self):
+        p=sample()
+        with patch.object(catalog,'products',return_value=[p]), \
+             patch.object(m,'compact_specs',return_value=['Класс A', 'Шум < 25 дБ']):
+            text=g.payload(p,5)['caption']
+        self.assertTrue(text.startswith('ROYAL CLIMA VELA NUOVA\n'))
+        self.assertIn('<blockquote>💎 <b>21 090 ₽</b></blockquote>',text)
+        self.assertIn('✓ Шум &lt; 25 дБ',text)
+        self.assertLess(text.index('21 090'),text.index('Ключевые особенности:'))
+
+    def test_missing_supplier_prices_are_explicit_and_keep_features(self):
+        p=dict(sample('KBO-11'),brand='Kentatsu',supplier='daichi',purchase_price=None,
+               series='Nobby Electro KBO')
+        q=dict(p,id='KBO-13',sku='KBO-13',model='KBO-13')
+        with patch.object(catalog,'products',return_value=[p,q]), \
+             patch.object(m,'compact_specs',return_value=['Вес 14,5 кг']):
+            text=g.payload(p,5)['caption']
+        self.assertIn('KBO-11 — Цена по запросу',text)
+        self.assertIn('KBO-13 — Цена по запросу',text)
+        self.assertIn('✓ Вес 14,5 кг',text)
+        self.assertNotIn('₽',text)
+
+    def test_long_features_keep_complete_html_and_selling_price(self):
+        from html.parser import HTMLParser
+        p=sample()
+        with patch.object(catalog,'products',return_value=[p]), \
+             patch.object(m,'compact_specs',return_value=['Класс A']+['Характеристика & <текст> '*10]*20):
+            text=g.payload(p,5)['caption']
+        self.assertLessEqual(len(text),1024)
+        self.assertIn('21 090 ₽</b></blockquote>',text)
+        self.assertIn('✓ Класс A',text)
+        self.assertFalse(text.endswith('&'))
+        HTMLParser().feed(text)
+
     def test_previous_caption_with_all_models_and_no_private_price(self):
         p=sample(); q=sample('RC-VN28HN')
         with patch.object(catalog,'products',return_value=[p,q]):
