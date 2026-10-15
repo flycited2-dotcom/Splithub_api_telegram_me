@@ -1,4 +1,4 @@
-"""Use the existing SplitHub conditioner style and generation workflow."""
+"""Use MCP/KBT rendering with the existing SplitHub publication workflow."""
 import re
 import sqlite3
 from stock_report_bot import catalog, channel_caption, fotogen_bridge

@@ -9,7 +9,7 @@ import logging
 
 import requests
 
-from stock_report_bot.config import FOTOGEN_API_URL, FOTOGEN_API_TOKEN
+from stock_report_bot.config import FOTOGEN_API_URL, FOTOGEN_API_TOKEN, FOTOGEN_CARD_MODE
 
 log = logging.getLogger('stock_report_bot.fotogen_bridge')
 
@@ -34,6 +34,8 @@ def submit_card(photo_url, brand, model, specs_lines, chat_id, caption=''):
     """
     if not FOTOGEN_API_URL or not FOTOGEN_API_TOKEN:
         return False, 'FOTOGEN_API_URL или FOTOGEN_API_TOKEN не задан в .env'
+    if FOTOGEN_CARD_MODE not in ('mcp', 'kbt'):
+        return False, 'Выберите стиль MCP или KBT в FOTOGEN_CARD_MODE'
 
     try:
         if photo_url.startswith('http://') or photo_url.startswith('https://'):
@@ -59,7 +61,8 @@ def submit_card(photo_url, brand, model, specs_lines, chat_id, caption=''):
             f"{FOTOGEN_API_URL.rstrip('/')}/api/submit-job",
             headers={'x-agent-token': FOTOGEN_API_TOKEN},
             data={
-                'mode': 'conditioner',
+                'mode': FOTOGEN_CARD_MODE,
+                'publish_mode': 'conditioner',
                 'specs': specs_text,
                 'brand': brand or '',
                 'model': model or '',

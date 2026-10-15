@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import re
 from stock_report_bot import catalog
+from stock_report_bot.config import FOTOGEN_CARD_MODE
 from stock_report_bot.catalog_excel import export_xlsx
 from stock_report_bot.telegram import send_message, edit_message_text, send_photo, send_document
 
@@ -272,7 +273,7 @@ def handle(chat_id,message_id,data):
             kb=keyboard([[button(f'+{pct}%',f"cat:{next_action}:{p['id']}:{pct}") for pct in group]
                          for group in ([0,1,2,3,4],[5,6,7,8,9,10],[15,20,25,30,40,50])]+[[button('⬅ К товару',f"cat:p:{p['id']}")]])
             edit_message_text(chat_id,message_id,
-                ('👤 <b>Фото + прайс серии + ТТХ/УТП</b>' if action=='c' else '🎨 <b>Карточка для канала · ваш стиль SplitHub</b>')+
+                ('👤 <b>Фото + прайс серии + ТТХ/УТП</b>' if action=='c' else f'🎨 <b>Карточка для канала · {html.escape(FOTOGEN_CARD_MODE.upper())}</b>')+
                 f"\nМоделей в наличии: {len(series_positions(p))}.\nВыберите наценку:",kb)
         elif action=='q':
             from stock_report_bot.catalog_generation import payload
@@ -281,7 +282,7 @@ def handle(chat_id,message_id,data):
                 return show(chat_id,message_id,'У поставщика нет фото для генерации.',[[button('⬅ К товару',f"cat:p:{p['id']}")]])
             if len(data['caption'])>1024:
                 return show(chat_id,message_id,'Прайс серии слишком длинный для подписи фото в канале. Выберите меньшую серию в прежнем меню.',[[button('⬅ К товару',f"cat:p:{p['id']}")]])
-            text='🎨 <b>Создать карточку для канала</b>\nВаш настроенный стиль SplitHub.\nФото и ТТХ/УТП будут переданы прежнему фотогенератору.\n\nПодпись к публикации:\n'+data['caption']
+            text=f'🎨 <b>Создать карточку для канала · {html.escape(FOTOGEN_CARD_MODE.upper())}</b>\nГрафитовый фон, белый текст и стеклянные плашки.\nФото товара сохраняется без изменения формы.\n\nПодпись к публикации:\n'+data['caption']
             return show(chat_id,message_id,text,[[button('🎨 Генерировать в моём стиле',f"cat:j:{p['id']}:{parts[3]}",'primary')],
                 [button('⬅ Изменить наценку',f"cat:f:{p['id']}")],[button('🏠 Главное меню','cat:home')]])
         elif action=='j':

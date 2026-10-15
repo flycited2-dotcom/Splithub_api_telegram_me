@@ -30,7 +30,8 @@ class GenerationTest(unittest.TestCase):
              patch.object(m,'show') as show,patch.object(g.fotogen_bridge,'submit_card') as submit:
             m.handle(1,2,'cat:q:'+p['id']+':5')
             submit.assert_not_called()
-            self.assertIn('ваш настроенный стиль'.casefold(),show.call_args.args[2].casefold())
+            self.assertIn('MCP',show.call_args.args[2])
+            self.assertIn('Графитовый фон',show.call_args.args[2])
             buttons=[b for row in show.call_args.args[3] for b in row]
             self.assertTrue(any(b['callback_data'].startswith('cat:j:') for b in buttons))
 

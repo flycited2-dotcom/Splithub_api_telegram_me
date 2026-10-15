@@ -33,6 +33,7 @@ BREEZ_AUTH_HEADER = config('BREEZ_AUTH_HEADER', default='')
 # карточку» вернёт ошибку «не задан» (см. fotogen_bridge.submit_card).
 FOTOGEN_API_URL = config('FOTOGEN_API_URL', default='')
 FOTOGEN_API_TOKEN = config('FOTOGEN_API_TOKEN', default='')
+FOTOGEN_CARD_MODE = config('FOTOGEN_CARD_MODE', default='mcp').strip().lower()
 
 # JAC — 4-й поставщик без API. Путь к JSON, который пишет скрапер b2b-jac.com
 # (проект osatakti_mdv_b2b, файл jac_stock_latest.json). Пусто → JAC не включается.
