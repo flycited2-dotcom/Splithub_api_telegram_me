@@ -187,7 +187,12 @@ def send_payload(chat_id,lines,image=None):
 def send_series(chat_id,p,pct):
     rows=series_positions(p)
     image=next((url for row in [p]+rows for url in (row.get('images') or [])),None)
-    send_payload(chat_id,series_lines(p,pct),image)
+    lines=series_lines(p,pct)
+    features=compact_specs(p)
+    if features:
+        lines += ['', '📋 <b>ТТХ / преимущества серии</b>']
+        lines += ['✓ '+html.escape(line) for line in features]
+    send_payload(chat_id,lines,image)
 
 def search(chat_id,query,page=0,message_id=None):
     query=' '.join(query.split()).strip()[:160]
@@ -247,13 +252,14 @@ def handle(chat_id,message_id,data):
                 send_message(chat_id,'Не удалось отправить Excel. Попробуйте ещё раз.')
         return send_message(chat_id,'⬇️ Остатки по группам и видам товаров.',keyboard([
             [button('⬅ К выбору файла','cat:x')],[button('🏠 Главное меню','cat:home')]]))
-    elif action in ('p','t','c','s','a'):
+    elif action in ('p','t','c','s','a','f','q','j'):
         p=catalog.product(parts[2])
         if not p or p['quantity']<=0:
             return send_message(chat_id,'Товар больше не доступен. Откройте каталог заново.')
         if action=='p':
             kb=keyboard([[button('📋 Фото + ТТХ / УТП',f"cat:t:{p['id']}")],
-                         [button('👤 Клиенту: фото + прайс серии',f"cat:c:{p['id']}",'primary')],
+                         [button('👤 Клиенту: фото + прайс + ТТХ',f"cat:c:{p['id']}",'primary')],
+                         [button('🎨 Создать карточку для канала',f"cat:f:{p['id']}",'primary')],
                          [button('⬅ К списку товаров',f"cat:l:{token(group_of(p))}:{p['supplier']}:{token(kind_of(p))}:0")],
                          [button('🏠 Главное меню','cat:home')]])
             edit_message_text(chat_id,message_id,'\n'.join(description(p)[:5]),kb)
@@ -261,14 +267,36 @@ def handle(chat_id,message_id,data):
         elif action=='a':
             send_payload(chat_id,description(p))
             send_message(chat_id,'Назад:',keyboard([[button('⬅ К товару',f"cat:p:{p['id']}")]]))
-        elif action=='c':
-            kb=keyboard([[button(f'+{pct}%',f"cat:s:{p['id']}:{pct}") for pct in group]
+        elif action in ('c','f'):
+            next_action='s' if action=='c' else 'q'
+            kb=keyboard([[button(f'+{pct}%',f"cat:{next_action}:{p['id']}:{pct}") for pct in group]
                          for group in ([0,1,2,3,4],[5,6,7,8,9,10],[15,20,25,30,40,50])]+[[button('⬅ К товару',f"cat:p:{p['id']}")]])
             edit_message_text(chat_id,message_id,
-                f"👤 <b>Прайс серии с фото</b>\nМоделей в наличии: {len(series_positions(p))}.\nВыберите наценку:",kb)
+                ('👤 <b>Фото + прайс серии + ТТХ/УТП</b>' if action=='c' else '🎨 <b>Карточка для канала · ваш стиль SplitHub</b>')+
+                f"\nМоделей в наличии: {len(series_positions(p))}.\nВыберите наценку:",kb)
+        elif action=='q':
+            from stock_report_bot.catalog_generation import payload
+            data=payload(p,int(parts[3]))
+            if not data['photo_url']:
+                return show(chat_id,message_id,'У поставщика нет фото для генерации.',[[button('⬅ К товару',f"cat:p:{p['id']}")]])
+            if len(data['caption'])>1024:
+                return show(chat_id,message_id,'Прайс серии слишком длинный для подписи фото в канале. Выберите меньшую серию в прежнем меню.',[[button('⬅ К товару',f"cat:p:{p['id']}")]])
+            text='🎨 <b>Создать карточку для канала</b>\nВаш настроенный стиль SplitHub.\nФото и ТТХ/УТП будут переданы прежнему фотогенератору.\n\nПодпись к публикации:\n'+data['caption']
+            return show(chat_id,message_id,text,[[button('🎨 Генерировать в моём стиле',f"cat:j:{p['id']}:{parts[3]}",'primary')],
+                [button('⬅ Изменить наценку',f"cat:f:{p['id']}")],[button('🏠 Главное меню','cat:home')]])
+        elif action=='j':
+            from stock_report_bot.catalog_generation import submit
+            ok,result=submit(p,int(parts[3]),chat_id,message_id)
+            texts={'submitted':'⏳ Карточка отправлена в ваш прежний фотогенератор. Результат придёт в чат фотоген-бота с прежними кнопками подтверждения и публикации.',
+                   'duplicate':'Эта задача уже отправлялась. Повторное нажатие не запускает ещё одну генерацию.',
+                   'unconfirmed':'Не удалось подтвердить приём задачи фотогенератором. Проверьте чат фотоген-бота; повторная отправка автоматически не выполняется.',
+                   'no_photo':'У поставщика нет фото для генерации.',
+                   'caption_too_long':'Прайс серии не помещается в подпись к фото.'}
+            return show(chat_id,message_id,texts[result],[[button('⬅ К товару',f"cat:p:{p['id']}")],[button('🏠 Главное меню','cat:home')]])
         else:
             send_series(chat_id,p,int(parts[3]))
-            send_message(chat_id,'Готово — фото и прайс серии можно переслать клиенту.',keyboard([
+            send_message(chat_id,'Готово — фото, прайс серии и ТТХ/УТП можно переслать клиенту.',keyboard([
                 [button('⬅ Изменить наценку',f"cat:c:{p['id']}")],
+                [button('🎨 Создать карточку для канала',f"cat:q:{p['id']}:{parts[3]}",'primary')],
                 [button('🏠 Главное меню','cat:home')]]))
     else: root(chat_id,message_id,data)
