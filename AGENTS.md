@@ -17,5 +17,9 @@
 - Never print Telegram request URLs in logs: they contain the bot token. Never
   commit .env, supplier data exports or database files.
 - Morning report: 08:30 Europe/Moscow. Do not leave a duplicate 09:00 cron entry.
+- Card rendering defaults to MCP (`FOTOGEN_CARD_MODE=mcp`); KBT is also allowed.
+  The owner rejected the conditioner wave style. Rendering mode and publication
+  destination are separate: send `publish_mode=conditioner` to retain the original
+  channel and manual publication approval. Preserve this field on redo/retry.
 
 See `docs/CATALOG-DEPLOYMENT.md` for deployment verification and rollback records.
