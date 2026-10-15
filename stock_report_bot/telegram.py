@@ -12,6 +12,7 @@
 import json
 import logging
 import time
+from urllib.parse import urlsplit
 
 import requests
 
@@ -122,13 +123,48 @@ def answer_callback_query(callback_query_id, text=None):
 
 
 def send_photo(chat_id, photo, caption=None):
-    """sendPhoto по URL (картинку забирает сам Telegram). caption ≤ 1024 символов,
-    HTML. None, если не удалось (URL недоступен Telegram) — caller откатывается на текст."""
+    """Try URL once; supplier CDNs often block Telegram, so upload bytes as fallback."""
+    if not TELEGRAM_BOT_TOKEN: return None
     payload = {'chat_id': chat_id, 'photo': photo}
     if caption:
         payload['caption'] = caption
         payload['parse_mode'] = 'HTML'
-    return _post('sendPhoto', payload)
+    result=_post('sendPhoto', payload, retries=1)
+    if result: return result
+    if not isinstance(photo,str) or urlsplit(photo).scheme not in ('http','https'):
+        return None
+    try:
+        limit=10*1024*1024
+        with requests.get(photo,headers={'User-Agent':'SplithubStockBot/1.0'},
+                          timeout=(10,30),stream=True) as response:
+            response.raise_for_status()
+            chunks=[]; size=0
+            for chunk in response.iter_content(65536):
+                size+=len(chunk)
+                if size>limit:
+                    logger.warning('Supplier photo exceeds Telegram upload limit')
+                    return None
+                chunks.append(chunk)
+            content=b''.join(chunks)
+        if content.startswith(b'\xff\xd8\xff'): name,mime='product.jpg','image/jpeg'
+        elif content.startswith(b'\x89PNG\r\n\x1a\n'): name,mime='product.png','image/png'
+        elif content.startswith(b'RIFF') and content[8:12]==b'WEBP': name,mime='product.webp','image/webp'
+        else:
+            logger.warning('Supplier did not return a supported photo')
+            return None
+        data={'chat_id':chat_id}
+        if caption: data.update(caption=caption,parse_mode='HTML')
+        result=_session.post(_api_url('sendPhoto'),data=data,
+            files={'photo':(name,content,mime)},timeout=(15,60))
+        if result.ok:
+            body=result.json()
+            if body.get('ok'):
+                logger.info('Supplier photo delivered by multipart upload')
+                return body.get('result')
+        logger.warning('Telegram photo upload failed: HTTP %s',result.status_code)
+    except (requests.RequestException,ValueError) as exc:
+        logger.warning('Supplier photo upload failed: %s',type(exc).__name__)
+    return None
 
 
 def send_document(chat_id, path, caption=''):

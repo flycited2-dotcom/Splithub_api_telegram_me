@@ -32,7 +32,12 @@ def money(value):
     except (InvalidOperation, ValueError): return None
 
 def plain(value):
-    text = html.unescape(html.unescape(str(value or '')))
+    text=str(value or '')
+    for _ in range(5):
+        decoded=html.unescape(text)
+        if decoded==text: break
+        text=decoded
+    text=re.sub(r'<sup>\s*([23])\s*</sup>',lambda m:'²' if m[1]=='2' else '³',text,flags=re.I)
     text = re.sub(r'<br\s*/?>|</p>', '\n', text, flags=re.I)
     return re.sub(r'<[^>]+>', '', text).strip()
 
@@ -122,7 +127,7 @@ def parse_daichi(data, params_map, store_id):
         prices=p.get('PRICES') or p.get('PRICES:') or {}
         base=next((v for v in prices.values() if v.get('XML_ID')=='BASE'),{})
         retail=next((v for v in prices.values() if 'mprc' in str(v.get('XML_ID','')).lower()),{})
-        specs=[{'title':v.get('NAME') or k,'value':str(v['VALUE'])} for k,v in pp.items()
+        specs=[{'title':plain(v.get('NAME') or k),'value':plain(v['VALUE'])} for k,v in pp.items()
                if k.startswith('ATTR_') and isinstance(v,dict) and v.get('VALUE') not in (None,'')]
         brand=attrs.get('BRAND',''); model=p.get('NAME') or sku
         result.append(dict(sku=sku,title=' '.join(filter(None,[brand,model])),model=model,

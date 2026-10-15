@@ -190,12 +190,14 @@ def series_lines(p,pct):
 
 def compact_specs(p):
     from stock_report_bot.specs import build_specs_for_card
+    from stock_report_bot.supplier_catalog import plain
     source='breeze' if p['supplier']=='breez' else p['supplier']
-    lines=build_specs_for_card(p.get('specs',[]),p.get('brand',''),p.get('series',''),source,
-                              utp_raw=p.get('utp') or None,titles=[p['title']])
+    specs=[{'title':plain(s['title']),'value':plain(s['value']),'unit':plain(s.get('unit',''))} for s in p.get('specs',[])]
+    lines=build_specs_for_card(specs,p.get('brand',''),p.get('series',''),source,
+                              utp_raw=plain(p.get('utp')) or None,titles=[p['title']])
     if not lines:
-        lines=[f"{s['title']}: {s['value']} {s.get('unit','')}".strip() for s in p.get('specs',[])[:7]]
-    if not lines and p.get('utp'): lines=p['utp'].splitlines()[:6]
+        lines=[f"{s['title']}: {s['value']} {s.get('unit','')}".strip() for s in specs[:7]]
+    if not lines and p.get('utp'): lines=plain(p['utp']).splitlines()[:6]
     return lines
 
 def send_payload(chat_id,lines,image=None):
@@ -216,12 +218,14 @@ def send_payload(chat_id,lines,image=None):
         if caption and send_photo(chat_id,image,'\n'.join(caption)):
             if remainder: return send_payload(chat_id,remainder)
             return
+        send_message(chat_id,'⚠️ Фото не удалось загрузить. Характеристики отправляю текстом; попробуйте фото ещё раз позже.')
     for chunk in chunks:
         if chunk: send_message(chat_id,chunk)
 
 def send_series(chat_id,p,pct):
     rows=series_positions(p)
     image=next((url for row in [p]+rows for url in (row.get('images') or [])),None)
+    if not image: send_message(chat_id,'ℹ️ У поставщика нет фото для этой серии. Отправляю прайс и характеристики.')
     lines=series_lines(p,pct)
     features=compact_specs(p)
     if features:
@@ -248,6 +252,7 @@ def search(chat_id,query,page=0,message_id=None):
     return show(chat_id,message_id,text,kb)
 
 def description(p,client=False,pct=0):
+    from stock_report_bot.supplier_catalog import plain
     lines=[f"<b>{html.escape(p['title'])}</b>"]
     if client:
         price=sale_price(p,pct)
@@ -258,7 +263,7 @@ def description(p,client=False,pct=0):
                   f"Цена поставщика: {p.get('purchase_price') or 'не предоставлена'} {html.escape(p.get('currency',''))}",
                   f"Обновлено: {p['updated_at'][:16]} UTC"]
     for s in p.get('specs',[]):
-        lines.append(html.escape(f"{s['title']}: {s['value']} {s.get('unit','')}".strip()))
+        lines.append(html.escape(f"{plain(s['title'])}: {plain(s['value'])} {plain(s.get('unit',''))}".strip()))
     if p.get('utp'): lines.append('\n💡 '+html.escape(p['utp']))
     if not p.get('specs') and not p.get('utp'): lines.append('Характеристики поставщиком не предоставлены.')
     return lines
@@ -268,6 +273,7 @@ def send_card(chat_id,p,client=False,pct=0):
     lines=[f"<b>{html.escape(p['title'])}</b>", '📋 Характеристики и преимущества']
     lines += ['✓ '+html.escape(line) for line in compact_specs(p)]
     if len(lines)==2: lines.append('Характеристики поставщиком не предоставлены.')
+    if not p.get('images'): send_message(chat_id,'ℹ️ У поставщика нет фото этой модели. Отправляю характеристики.')
     send_payload(chat_id,lines,next(iter(p.get('images') or []),None))
     send_message(chat_id,'Другие действия:',keyboard([
         [button('Все характеристики',f"cat:a:{p['id']}")],
