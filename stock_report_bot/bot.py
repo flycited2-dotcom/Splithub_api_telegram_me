@@ -14,7 +14,7 @@ import time
 
 import psycopg2
 
-from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID
+from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID, config
 from stock_report_bot.breez import fetch_breez_base_by_nc, fetch_breez_utp_by_nc
 from stock_report_bot.db import fetch_stock_rows, fetch_tech_values
 from stock_report_bot.jac import load_jac_rows
@@ -118,6 +118,14 @@ def _handle_callback(cb):
     data = cb.get('data') or ''
     if not _is_owner(from_id):
         answer_callback_query(cq_id)
+        return
+    if data.startswith('cat:'):
+        from stock_report_bot import catalog_menu
+        answer_callback_query(cq_id)
+        try:
+            catalog_menu.handle(chat_id, message_id, data)
+        except (IndexError, KeyError, ValueError):
+            send_message(chat_id, 'Меню обновилось — откройте /catalog заново.')
         return
     parts = menu.cb_unpack(data)
     action = parts[0] if parts else ''
@@ -230,11 +238,19 @@ def _handle_message(msg):
     text = (msg.get('text') or '').strip()
     if not _is_owner(from_id):
         return
+    if text in ('/catalog', '/excel') or (config('CATALOG_ENABLED', default=False, cast=bool)
+            and text in ('/start', '/menu', menu.MENU_BUTTON_TEXT)):
+        from stock_report_bot import catalog_menu
+        if text == '/excel':
+            catalog_menu.handle(chat_id, None, 'cat:x')
+        else:
+            catalog_menu.root(chat_id)
+        return
     if text == '/start':
         # один раз ставим постоянную кнопку «📋 Меню» — дальше владелец просто тапает её
         send_message(chat_id, 'Готово 👇 Жмите «📋 Меню» в любой момент.', menu.MAIN_REPLY_KB)
         send_message(chat_id, menu.text_suppliers(), menu.kb_suppliers(_rows()))
-    elif text in ('/menu', menu.MENU_BUTTON_TEXT):
+    elif text in ('/menu', '/series', menu.MENU_BUTTON_TEXT):
         send_message(chat_id, menu.text_suppliers(), menu.kb_suppliers(_rows()))
 
 
@@ -243,7 +259,10 @@ def run():
         logger.error('TELEGRAM_OWNER_CHAT_ID не задан — некого слушать')
         return 1
     try:
-        set_my_commands([{'command': 'menu', 'description': '📋 Остатки с наценкой'}])
+        set_my_commands([{'command': 'menu', 'description': '📚 Каталог товаров'},
+                         {'command': 'catalog', 'description': '📂 Группы и виды товаров'},
+                         {'command': 'excel', 'description': '📊 Остатки Excel'},
+                         {'command': 'series', 'description': '🎨 Серии и фотогенератор'}])
     except Exception as exc:
         logger.warning('setMyCommands не удалось: %s', exc)
     logger.info('menu-bot запущен, long-polling…')

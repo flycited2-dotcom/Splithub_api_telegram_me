@@ -128,3 +128,20 @@ def send_photo(chat_id, photo, caption=None):
         payload['caption'] = caption
         payload['parse_mode'] = 'HTML'
     return _post('sendPhoto', payload)
+
+
+def send_document(chat_id, path, caption=''):
+    """One multipart upload; caller can safely report a failed delivery."""
+    if not TELEGRAM_BOT_TOKEN or not chat_id:
+        return False
+    try:
+        with open(path, 'rb') as stream:
+            response = _session.post(_api_url('sendDocument'),
+                data={'chat_id': chat_id, 'caption': caption},
+                files={'document': (str(path).replace('\\', '/').split('/')[-1], stream,
+                       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')},
+                timeout=(15, 90))
+        return response.ok and response.json().get('ok') is True
+    except (requests.RequestException, ValueError):
+        logger.error('Telegram document upload failed')
+        return False

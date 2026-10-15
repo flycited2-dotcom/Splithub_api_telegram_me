@@ -13,9 +13,9 @@ config = Config(RepositoryEnv(_ENV_PATH)) if os.path.exists(_ENV_PATH) else env_
 DB = {
     'host': config('DB_HOST', default='localhost'),
     'port': config('DB_PORT', default='5432'),
-    'dbname': config('DB_NAME'),
-    'user': config('DB_USER'),
-    'password': config('DB_PASSWORD'),
+    'dbname': config('DB_NAME', default=''),
+    'user': config('DB_USER', default=''),
+    'password': config('DB_PASSWORD', default=''),
 }
 
 TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')

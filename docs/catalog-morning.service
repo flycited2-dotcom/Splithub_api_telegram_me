@@ -1,0 +1,11 @@
+[Unit]
+Description=SplitHub supplier catalogue and morning Excel
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/splithub_api_telegram
+EnvironmentFile=/opt/splithub_api_telegram/.env
+ExecStart=/opt/splithub_api_telegram/run_daily.sh
+TimeoutStartSec=1800
