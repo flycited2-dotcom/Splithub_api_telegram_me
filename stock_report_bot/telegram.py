@@ -44,7 +44,7 @@ def send_telegram(text, chat_id, retries=4, timeout=30):
             resp.raise_for_status()
             return True
         except Exception as exc:
-            logger.warning('Telegram попытка %d/%d не удалась: %s', attempt, retries, exc)
+            logger.warning('Telegram попытка %d/%d не удалась: %s', attempt, retries, type(exc).__name__)
             if attempt < retries:
                 time.sleep(3)
     logger.error('Telegram send окончательно не удалось после %d попыток', retries)
@@ -73,7 +73,8 @@ def _post(method, payload, timeout=30, retries=3):
             resp.raise_for_status()
             return resp.json().get('result')
         except Exception as exc:
-            logger.warning('Telegram %s попытка %d/%d: %s', method, attempt, retries, exc)
+            code=getattr(getattr(exc,'response',None),'status_code',None)
+            logger.warning('Telegram %s попытка %d/%d: %s HTTP %s', method, attempt, retries, type(exc).__name__, code)
             if attempt < retries:
                 time.sleep(2)
     return None

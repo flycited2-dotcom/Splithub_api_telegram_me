@@ -4,14 +4,68 @@ import html
 from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 import tempfile
+import re
 from stock_report_bot import catalog
 from stock_report_bot.catalog_excel import export_xlsx
 from stock_report_bot.telegram import send_message, edit_message_text, send_photo, send_document
 
 PAGE=8
 def token(value): return hashlib.sha256(value.encode()).hexdigest()[:12]
-def button(text,data): return {'text':text[:60],'callback_data':data}
+def button(text,data,style=None):
+    b={'text':text[:60],'callback_data':data}
+    if style: b['style']=style
+    return b
 def keyboard(rows): return {'inline_keyboard':rows}
+
+SUPPLIERS={'breez':'Breez · Бриз','daichi':'Daichi · Даичи'}
+def group_of(p):
+    g=p['group_name'].lower()
+    if any(v in g for v in ('сплит','кондиционир','мультисистем','vrf')): return 'Кондиционеры'
+    if any(v in g for v in ('вентиляц',)): return 'Вентиляция'
+    if any(v in g for v in ('котлы','теплов','отоплен')): return 'Отопление и вода'
+    if 'водоочист' in g: return 'Очистка воды'
+    if 'управлен' in g: return 'Управление и Wi-Fi'
+    if 'расходн' in g: return 'Материалы и инструмент'
+    if 'аксессуар' in g: return 'Аксессуары'
+    if 'бытовое' in g: return 'Техника для дома'
+    if 'без категории' in g: return 'Прочие товары'
+    return p['group_name']
+
+def kind_of(p):
+    k=' '.join(p['kind'].split()); g=p['group_name'].lower()
+    if group_of(p)=='Кондиционеры':
+        if 'vrf' in g: prefix='VRF'
+        elif 'мульти' in g or 'мульти' in k.lower(): prefix='Мультисплит'
+        elif 'полупром' in g or 'полупром' in k.lower(): prefix='Полупром'
+        else: prefix='Бытовые'
+        low=k.lower()
+        if 'внутрен' in low: label='Внутренние блоки'
+        elif 'наруж' in low: label='Наружные блоки'
+        elif 'мобил' in low: return 'Мобильные кондиционеры'
+        elif 'кассет' in low: label='Кассетные'
+        elif 'канальн' in low: label='Канальные'
+        elif 'потолоч' in low: label='Напольно-потолочные'
+        elif 'аксессуар' in low: label='Аксессуары'
+        else: label='Комплекты'
+        return prefix+' · '+label
+    return k.replace('Бытовые ','').replace('Бытовой ','').replace('для сплит-систем','').strip()
+
+def show(chat_id,message_id,text,kb):
+    return edit_message_text(chat_id,message_id,text,keyboard(kb)) if message_id else send_message(chat_id,text,keyboard(kb))
+
+def home(chat_id,message_id=None):
+    return show(chat_id,message_id,'🏠 <b>SplitHub · Главное меню</b>\nВыберите действие:',[
+        [button('📋 Серии и прайс — как раньше','cat:old','primary')],
+        [button('📄 Список остатков — как раньше','cat:report')],
+        [button('📂 Каталог по группам','cat:root')],
+        [button('🔎 Найти модель','cat:find')],
+        [button('⬇️ Скачать остатки Excel','cat:x','primary')]])
+
+def pages(kb,page,total,prefix):
+    nav=[]
+    if page: nav.append(button('◀ Назад',f'{prefix}:{page-1}'))
+    if (page+1)*PAGE<total: nav.append(button('Далее ▶',f'{prefix}:{page+1}'))
+    if nav: kb.append(nav)
 def root(chat_id, message_id=None, data='cat:root'):
     rows=catalog.products()
     parts=data.split(':'); action=parts[1]
@@ -19,43 +73,57 @@ def root(chat_id, message_id=None, data='cat:root'):
     kb=[]
     if action=='root':
         page=max(0,int(parts[2])) if len(parts)>2 else 0
-        groups=sorted({p['group_name'] for p in rows})
+        groups=sorted({group_of(p) for p in rows})
         for group in groups[page*PAGE:(page+1)*PAGE]:
-            count=sum(p['group_name']==group for p in rows)
-            kb.append([button(f'{group} · {count}',f'cat:g:{token(group)}:0')])
+            count=sum(group_of(p)==group for p in rows)
+            kb.append([button(f'{group} · {count}',f'cat:g:{token(group)}')])
         nav=[]
         if page: nav.append(button('◀',f'cat:root:{page-1}'))
         if (page+1)*PAGE<len(groups): nav.append(button('▶',f'cat:root:{page+1}'))
         if nav: kb.append(nav)
-        kb += [[button('📊 Скачать Excel','cat:x')]]
+        kb += [[button('⬅ Главное меню','cat:home')]]
         if not rows: text+='\nКаталог ещё не загружен.'
         for s in catalog.status(): text+=f"\n{html.escape(s['supplier'])}: {html.escape(s['updated_at'][:16])} UTC"
     else:
-        group=next((g for g in {p['group_name'] for p in rows} if token(g)==parts[2]),None)
+        group=next((g for g in {group_of(p) for p in rows} if token(g)==parts[2]),None)
         if group is None: return root(chat_id,message_id)
-        selected=[p for p in rows if p['group_name']==group]
+        selected=[p for p in rows if group_of(p)==group]
         text=f'📂 <b>{html.escape(group)}</b>'
         if action=='g':
-            page=max(0,int(parts[3])); kinds=sorted({p['kind'] for p in selected})
+            text+='\nВыберите поставщика:'
+            for supplier in sorted({p['supplier'] for p in selected}):
+                count=sum(p['supplier']==supplier for p in selected)
+                kb.append([button(f'{SUPPLIERS.get(supplier,supplier)} · {count}',f'cat:v:{token(group)}:{supplier}:0')])
+            kb.append([button('⬅ Группы','cat:root')])
+            kb.append([button('🏠 Главное меню','cat:home')])
+            return show(chat_id,message_id,text,kb)
+        supplier=parts[3]
+        selected=[p for p in selected if p['supplier']==supplier]
+        text+='\n'+html.escape(SUPPLIERS.get(supplier,supplier))
+        if action=='v':
+            page=max(0,int(parts[4])); kinds=sorted({kind_of(p) for p in selected})
             for kind in kinds[page*PAGE:(page+1)*PAGE]:
-                kb.append([button(kind,f'cat:k:{token(group)}:{token(kind)}:0')])
-            prefix=f'cat:g:{token(group)}'
+                count=sum(kind_of(p)==kind for p in selected)
+                kb.append([button(f'{kind} · {count}',f'cat:l:{token(group)}:{supplier}:{token(kind)}:0')])
+            prefix=f'cat:v:{token(group)}:{supplier}'
             total=len(kinds)
         else:
-            kind=next((k for k in {p['kind'] for p in selected} if token(k)==parts[3]),None)
+            kind=next((k for k in {kind_of(p) for p in selected} if token(k)==parts[4]),None)
             if kind is None: return root(chat_id,message_id)
-            selected=[p for p in selected if p['kind']==kind]
-            page=max(0,int(parts[4])); total=len(selected)
+            selected=[p for p in selected if kind_of(p)==kind]
+            page=max(0,int(parts[5])); total=len(selected)
             text+=f'\n{html.escape(kind)}'
             for p in selected[page*PAGE:(page+1)*PAGE]:
-                kb.append([button(f"{p['title']} · {p['quantity']:g} шт.",f"cat:p:{p['id']}")])
-            prefix=f'cat:k:{token(group)}:{token(kind)}'
+                name=' '.join(filter(None,[p.get('brand'),p.get('model') or p['title']]))
+                kb.append([button(f"{name} · {p['quantity']:g} шт.",f"cat:p:{p['id']}")])
+            prefix=f'cat:l:{token(group)}:{supplier}:{token(kind)}'
         nav=[]
         if page: nav.append(button('◀',f'{prefix}:{page-1}'))
         if (page+1)*PAGE<total: nav.append(button('▶',f'{prefix}:{page+1}'))
         if nav: kb.append(nav)
-        if action=='k': kb.append([button('⬅ Виды товаров',f'cat:g:{token(group)}:0')])
-        kb.append([button('🏠 Каталог','cat:root')])
+        back=f'cat:v:{token(group)}:{supplier}:0' if action=='l' else f'cat:g:{token(group)}'
+        kb.append([button('⬅ Назад',back)])
+        kb.append([button('🏠 Главное меню','cat:home')])
     markup=keyboard(kb)
     return edit_message_text(chat_id,message_id,text,markup) if message_id else send_message(chat_id,text,markup)
 
@@ -64,6 +132,77 @@ def sale_price(p,pct):
     base=Decimal(p['purchase_price'])*(1+Decimal(pct)/100)
     # Existing bot's rounding up to a price ending in 90.
     return ((base-90)/100).to_integral_value(rounding=ROUND_CEILING)*100+90
+
+def series_positions(p):
+    # A series with no name must never collect unrelated products.
+    if not p.get('series','').strip(): return [p]
+    return sorted([r for r in catalog.products() if r['supplier']==p['supplier']
+        and r.get('brand','')==p.get('brand','') and r.get('series','').strip()==p['series'].strip()
+        and kind_of(r)==kind_of(p)],key=lambda r:r.get('model') or r['title'])
+
+def series_lines(p,pct):
+    from stock_report_bot.menu import short_series
+    heading=' '.join(filter(None,[p.get('brand'),short_series(p.get('series') or p.get('model') or p['title'])]))
+    lines=[f'🏷 <b>{html.escape(heading)}</b>','']
+    for row in series_positions(p):
+        price=sale_price(row,pct)
+        price_text=f"{int(price):,}".replace(',',' ')+' ₽' if price is not None else 'Цена по запросу'
+        if row.get('currency','RUB')!='RUB' and price is not None: price_text=f"{price} {row['currency']}"
+        label=' '.join(filter(None,[row.get('brand'),row.get('model') or row['title']]))
+        lines.append(f"• <b>{html.escape(label)}</b> — {price_text} — {'от ' if row.get('quantity_lower_bound') else ''}{row['quantity']:g} шт.")
+        lines.append('────────────────')
+    return lines[:-1]
+
+def compact_specs(p):
+    from stock_report_bot.specs import build_specs_for_card
+    source='breeze' if p['supplier']=='breez' else p['supplier']
+    lines=build_specs_for_card(p.get('specs',[]),p.get('brand',''),p.get('series',''),source,
+                              utp_raw=p.get('utp') or None,titles=[p['title']])
+    if not lines:
+        lines=[f"{s['title']}: {s['value']} {s.get('unit','')}".strip() for s in p.get('specs',[])[:7]]
+    if not lines and p.get('utp'): lines=p['utp'].splitlines()[:6]
+    return lines
+
+def send_payload(chat_id,lines,image=None):
+    chunks=['']
+    for line in lines:
+        if len(line)>2500:
+            raw=html.unescape(line)
+            segments=[html.escape(raw[i:i+500]) for i in range(0,len(raw),500)]
+        else: segments=[line]
+        for segment in segments:
+            if len(chunks[-1])+len(segment)+1>3500: chunks.append('')
+            chunks[-1]+=segment+'\n'
+    if image:
+        # Fill the photo caption with complete lines, rather than just a title.
+        caption=[]; remainder=list(lines)
+        while remainder and len('\n'.join(caption+[remainder[0]]))<=1000:
+            caption.append(remainder.pop(0))
+        if caption and send_photo(chat_id,image,'\n'.join(caption)):
+            if remainder: return send_payload(chat_id,remainder)
+            return
+    for chunk in chunks:
+        if chunk: send_message(chat_id,chunk)
+
+def send_series(chat_id,p,pct):
+    rows=series_positions(p)
+    image=next((url for row in [p]+rows for url in (row.get('images') or [])),None)
+    send_payload(chat_id,series_lines(p,pct),image)
+
+def search(chat_id,query,page=0,message_id=None):
+    query=' '.join(query.split()).strip()[:160]
+    words=query.casefold().split()
+    rows=[p for p in catalog.products() if all(w in ' '.join(str(p.get(k,'')) for k in
+           ('brand','model','series','title','sku')).casefold() for w in words)] if words else []
+    kb=[]
+    for p in rows[:30]:
+        name=' '.join(filter(None,[p.get('brand'),p.get('model') or p['title']]))
+        kb.append([button(f"{name} · {SUPPLIERS.get(p['supplier'],p['supplier'])}",f"cat:p:{p['id']}")])
+    kb.append([button('🔎 Новый поиск','cat:find')]); kb.append([button('🏠 Главное меню','cat:home')])
+    text=f'🔎 <b>{html.escape(query)}</b>\nНайдено: {len(rows)}.'
+    if len(rows)>30: text+=' Показаны первые 30 — уточните модель.'
+    if not rows: text+=' Попробуйте артикул, модель или бренд.'
+    return show(chat_id,message_id,text,kb)
 
 def description(p,client=False,pct=0):
     lines=[f"<b>{html.escape(p['title'])}</b>"]
@@ -82,45 +221,54 @@ def description(p,client=False,pct=0):
     return lines
 
 def send_card(chat_id,p,client=False,pct=0):
-    lines=description(p,client,pct)
-    # Split by lines, including exceptionally long supplier descriptions.
-    chunks=['']
-    for line in lines:
-        # escape chunks independently so an HTML entity cannot be split in half
-        if len(line)>2500:
-            raw=html.unescape(line)
-            segments=[html.escape(raw[i:i+500]) for i in range(0,len(raw),500)]
-        else: segments=[line]
-        for segment in segments:
-            if len(chunks[-1])+len(segment)+1>3500: chunks.append('')
-            chunks[-1]+=segment+'\n'
-    image=next(iter(p.get('images') or []),None)
-    if image:
-        caption=chunks[0] if len(chunks[0])<=1024 else html.escape(p['title'])[:900]
-        if send_photo(chat_id,image,caption) and caption==chunks[0]: chunks=chunks[1:]
-    for chunk in chunks:
-        if chunk: send_message(chat_id,chunk)
-
+    if client: return send_series(chat_id,p,pct)
+    lines=[f"<b>{html.escape(p['title'])}</b>", '📋 Характеристики и преимущества']
+    lines += ['✓ '+html.escape(line) for line in compact_specs(p)]
+    if len(lines)==2: lines.append('Характеристики поставщиком не предоставлены.')
+    send_payload(chat_id,lines,next(iter(p.get('images') or []),None))
+    send_message(chat_id,'Другие действия:',keyboard([
+        [button('Все характеристики',f"cat:a:{p['id']}")],
+        [button('⬅ К товару',f"cat:p:{p['id']}")],
+        [button('🏠 Главное меню','cat:home')]]))
+    return
 def handle(chat_id,message_id,data):
     parts=data.split(':'); action=parts[1]
+    if action=='home': return home(chat_id,message_id)
+    if action=='x' and len(parts)==2:
+        return show(chat_id,message_id,'⬇️ <b>Скачать остатки</b>\nВыберите состав Excel:',[
+            [button('Все поставщики','cat:x:all','primary')],
+            [button('Только Breez','cat:x:breez')], [button('Только Daichi','cat:x:daichi')],
+            [button('⬅ Главное меню','cat:home')]])
     if action=='x':
         with tempfile.TemporaryDirectory() as directory:
-            path=export_xlsx(catalog.products(),Path(directory)/'Симферополь-остатки.xlsx')
+            rows=[p for p in catalog.products() if parts[2]=='all' or p['supplier']==parts[2]]
+            path=export_xlsx(rows,Path(directory)/'Симферополь-остатки.xlsx')
             if not send_document(chat_id,path,'Остатки и цены · группы и виды товаров'):
                 send_message(chat_id,'Не удалось отправить Excel. Попробуйте ещё раз.')
-    elif action in ('p','t','c','s'):
+        return send_message(chat_id,'⬇️ Остатки по группам и видам товаров.',keyboard([
+            [button('⬅ К выбору файла','cat:x')],[button('🏠 Главное меню','cat:home')]]))
+    elif action in ('p','t','c','s','a'):
         p=catalog.product(parts[2])
         if not p or p['quantity']<=0:
             return send_message(chat_id,'Товар больше не доступен. Откройте каталог заново.')
         if action=='p':
-            kb=keyboard([[button('📋 ТТХ + УТП + фото',f"cat:t:{p['id']}")],
-                         [button('👤 Карточка клиенту',f"cat:c:{p['id']}")],
-                         [button('🏠 Каталог','cat:root')]])
+            kb=keyboard([[button('📋 Фото + ТТХ / УТП',f"cat:t:{p['id']}")],
+                         [button('👤 Клиенту: фото + прайс серии',f"cat:c:{p['id']}",'primary')],
+                         [button('⬅ К списку товаров',f"cat:l:{token(group_of(p))}:{p['supplier']}:{token(kind_of(p))}:0")],
+                         [button('🏠 Главное меню','cat:home')]])
             edit_message_text(chat_id,message_id,'\n'.join(description(p)[:5]),kb)
         elif action=='t': send_card(chat_id,p)
+        elif action=='a':
+            send_payload(chat_id,description(p))
+            send_message(chat_id,'Назад:',keyboard([[button('⬅ К товару',f"cat:p:{p['id']}")]]))
         elif action=='c':
             kb=keyboard([[button(f'+{pct}%',f"cat:s:{p['id']}:{pct}") for pct in group]
-                         for group in ([0,1,2,3,4],[5,6,7,8,9,10],[15,20,25,30,40,50])]+[[button('🏠 Каталог','cat:root')]])
-            edit_message_text(chat_id,message_id,'Выберите наценку для карточки клиента:',kb)
-        else: send_card(chat_id,p,True,int(parts[3]))
+                         for group in ([0,1,2,3,4],[5,6,7,8,9,10],[15,20,25,30,40,50])]+[[button('⬅ К товару',f"cat:p:{p['id']}")]])
+            edit_message_text(chat_id,message_id,
+                f"👤 <b>Прайс серии с фото</b>\nМоделей в наличии: {len(series_positions(p))}.\nВыберите наценку:",kb)
+        else:
+            send_series(chat_id,p,int(parts[3]))
+            send_message(chat_id,'Готово — фото и прайс серии можно переслать клиенту.',keyboard([
+                [button('⬅ Изменить наценку',f"cat:c:{p['id']}")],
+                [button('🏠 Главное меню','cat:home')]]))
     else: root(chat_id,message_id,data)
