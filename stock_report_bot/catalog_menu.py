@@ -11,12 +11,38 @@ from stock_report_bot.catalog_excel import export_xlsx
 from stock_report_bot.telegram import send_message, edit_message_text, send_photo, send_document
 
 PAGE=8
+_SEARCH_QUERIES={}
 def token(value): return hashlib.sha256(value.encode()).hexdigest()[:12]
 def button(text,data,style=None):
     b={'text':text[:60],'callback_data':data}
     if style: b['style']=style
     return b
 def keyboard(rows): return {'inline_keyboard':rows}
+
+def short_choice(number,label,count=None):
+    """Buttons are selectors; full information is in the numbered message."""
+    prefix=f'{number}. '
+    suffix=f' · {count}' if count is not None else ''
+    budget=26-len(prefix)-len(suffix)
+    label=' '.join(label.split())
+    if len(label)>budget: label=label[:budget-1].rstrip()+'…'
+    return prefix+label+suffix
+
+def kind_label(kind):
+    low=kind.lower()
+    if 'кот' in low and 'газов' in low:
+        if 'двухконтур' in low: return 'Газовые · 2 контура'
+        if 'раздельн' in low: return 'Газовые · раздельные ТО'
+        return 'Газовые котлы'
+    if 'кот' in low and 'электр' in low:
+        return 'Электрокотлы с насосом' if 'насос' in low else 'Электрокотлы'
+    for word,title in [('увлажнит','Увлажнители'),('осушит','Осушители'),('тепловентил','Тепловентиляторы')]:
+        if word in low: return title
+    return kind
+
+def product_name(p):
+    model=p.get('model') or p['title']; brand=p.get('brand','')
+    return model if model.casefold().startswith(brand.casefold()) else ' '.join(filter(None,[brand,model]))
 
 SUPPLIERS={'breez':'Breez · Бриз','daichi':'Daichi · Даичи'}
 def group_of(p):
@@ -55,12 +81,12 @@ def show(chat_id,message_id,text,kb):
     return edit_message_text(chat_id,message_id,text,keyboard(kb)) if message_id else send_message(chat_id,text,keyboard(kb))
 
 def home(chat_id,message_id=None):
-    return show(chat_id,message_id,'🏠 <b>SplitHub · Главное меню</b>\nВыберите действие:',[
-        [button('📋 Серии и прайс — как раньше','cat:old','primary')],
-        [button('📄 Список остатков — как раньше','cat:report')],
+    return show(chat_id,message_id,'🏠 <b>SplitHub · Главное меню</b>\nСерии и прайс — прежнее меню с фотогенератором.\nКаталог — группы, поставщики и товары.\nВыберите действие:',[
+        [button('📋 Серии и прайс','cat:old','primary')],
+        [button('📄 Список остатков','cat:report')],
         [button('📂 Каталог по группам','cat:root')],
         [button('🔎 Найти модель','cat:find')],
-        [button('⬇️ Скачать остатки Excel','cat:x','primary')]])
+        [button('⬇️ Excel остатков','cat:x','primary')]])
 
 def pages(kb,page,total,prefix):
     nav=[]
@@ -75,9 +101,11 @@ def root(chat_id, message_id=None, data='cat:root'):
     if action=='root':
         page=max(0,int(parts[2])) if len(parts)>2 else 0
         groups=sorted({group_of(p) for p in rows})
-        for group in groups[page*PAGE:(page+1)*PAGE]:
+        text+='\n'
+        for number,group in enumerate(groups[page*PAGE:(page+1)*PAGE],start=page*PAGE+1):
             count=sum(group_of(p)==group for p in rows)
-            kb.append([button(f'{group} · {count}',f'cat:g:{token(group)}')])
+            text+=f'\n<b>{number}.</b> {html.escape(group)} — {count} поз.\n'
+            kb.append([button(short_choice(number,group,count),f'cat:g:{token(group)}')])
         nav=[]
         if page: nav.append(button('◀',f'cat:root:{page-1}'))
         if (page+1)*PAGE<len(groups): nav.append(button('▶',f'cat:root:{page+1}'))
@@ -103,9 +131,11 @@ def root(chat_id, message_id=None, data='cat:root'):
         text+='\n'+html.escape(SUPPLIERS.get(supplier,supplier))
         if action=='v':
             page=max(0,int(parts[4])); kinds=sorted({kind_of(p) for p in selected})
-            for kind in kinds[page*PAGE:(page+1)*PAGE]:
+            text+='\n\nВыберите категорию по номеру:\n'
+            for number,kind in enumerate(kinds[page*PAGE:(page+1)*PAGE],start=page*PAGE+1):
                 count=sum(kind_of(p)==kind for p in selected)
-                kb.append([button(f'{kind} · {count}',f'cat:l:{token(group)}:{supplier}:{token(kind)}:0')])
+                text+=f'\n<b>{number}.</b> {html.escape(kind)} — {count} поз.\n'
+                kb.append([button(short_choice(number,kind_label(kind),count),f'cat:l:{token(group)}:{supplier}:{token(kind)}:0')])
             prefix=f'cat:v:{token(group)}:{supplier}'
             total=len(kinds)
         else:
@@ -114,9 +144,13 @@ def root(chat_id, message_id=None, data='cat:root'):
             selected=[p for p in selected if kind_of(p)==kind]
             page=max(0,int(parts[5])); total=len(selected)
             text+=f'\n{html.escape(kind)}'
-            for p in selected[page*PAGE:(page+1)*PAGE]:
-                name=' '.join(filter(None,[p.get('brand'),p.get('model') or p['title']]))
-                kb.append([button(f"{name} · {p['quantity']:g} шт.",f"cat:p:{p['id']}")])
+            text+='\n\nВыберите товар по номеру:\n'
+            for number,p in enumerate(selected[page*PAGE:(page+1)*PAGE],start=page*PAGE+1):
+                name=product_name(p)
+                text+=f'\n<b>{number}. {html.escape(name)}</b>\n'
+                if p['title']!=name: text+=html.escape(p['title'])+'\n'
+                text+=f"Остаток: {'от ' if p.get('quantity_lower_bound') else ''}{p['quantity']:g} шт.\n"
+                kb.append([button(short_choice(number,p.get('model') or p['title']),f"cat:p:{p['id']}")])
             prefix=f'cat:l:{token(group)}:{supplier}:{token(kind)}'
         nav=[]
         if page: nav.append(button('◀',f'{prefix}:{page-1}'))
@@ -200,13 +234,16 @@ def search(chat_id,query,page=0,message_id=None):
     words=query.casefold().split()
     rows=[p for p in catalog.products() if all(w in ' '.join(str(p.get(k,'')) for k in
            ('brand','model','series','title','sku')).casefold() for w in words)] if words else []
+    query_id=token(query)
+    if len(_SEARCH_QUERIES)>=100: _SEARCH_QUERIES.pop(next(iter(_SEARCH_QUERIES)))
+    _SEARCH_QUERIES[(chat_id,query_id)]=query
+    text=f'🔎 <b>{html.escape(query)}</b>\nНайдено: {len(rows)}.\nВыберите товар по номеру:\n'
     kb=[]
-    for p in rows[:30]:
-        name=' '.join(filter(None,[p.get('brand'),p.get('model') or p['title']]))
-        kb.append([button(f"{name} · {SUPPLIERS.get(p['supplier'],p['supplier'])}",f"cat:p:{p['id']}")])
+    for number,p in enumerate(rows[page*PAGE:(page+1)*PAGE],start=page*PAGE+1):
+        text+=f"\n<b>{number}. {html.escape(product_name(p))}</b>\n{html.escape(SUPPLIERS.get(p['supplier'],p['supplier']))} · {p['quantity']:g} шт.\n"
+        kb.append([button(short_choice(number,p.get('model') or p['title']),f"cat:p:{p['id']}")])
+    pages(kb,page,len(rows),f'cat:z:{query_id}')
     kb.append([button('🔎 Новый поиск','cat:find')]); kb.append([button('🏠 Главное меню','cat:home')])
-    text=f'🔎 <b>{html.escape(query)}</b>\nНайдено: {len(rows)}.'
-    if len(rows)>30: text+=' Показаны первые 30 — уточните модель.'
     if not rows: text+=' Попробуйте артикул, модель или бренд.'
     return show(chat_id,message_id,text,kb)
 
@@ -240,6 +277,12 @@ def send_card(chat_id,p,client=False,pct=0):
 def handle(chat_id,message_id,data):
     parts=data.split(':'); action=parts[1]
     if action=='home': return home(chat_id,message_id)
+    if action=='z':
+        query=_SEARCH_QUERIES.get((chat_id,parts[2]))
+        if query is None:
+            return show(chat_id,message_id,'Поиск обновился. Нажмите «Найти модель» и введите запрос снова.',[
+                [button('🔎 Найти модель','cat:find')],[button('🏠 Главное меню','cat:home')]])
+        return search(chat_id,query,int(parts[3]),message_id)
     if action=='x' and len(parts)==2:
         return show(chat_id,message_id,'⬇️ <b>Скачать остатки</b>\nВыберите состав Excel:',[
             [button('Все поставщики','cat:x:all','primary')],
@@ -259,9 +302,9 @@ def handle(chat_id,message_id,data):
             return send_message(chat_id,'Товар больше не доступен. Откройте каталог заново.')
         if action=='p':
             kb=keyboard([[button('📋 Фото + ТТХ / УТП',f"cat:t:{p['id']}")],
-                         [button('👤 Клиенту: фото + прайс + ТТХ',f"cat:c:{p['id']}",'primary')],
-                         [button('🎨 Создать карточку для канала',f"cat:f:{p['id']}",'primary')],
-                         [button('⬅ К списку товаров',f"cat:l:{token(group_of(p))}:{p['supplier']}:{token(kind_of(p))}:0")],
+                         [button('👤 Клиенту: прайс + ТТХ',f"cat:c:{p['id']}",'primary')],
+                         [button('🎨 Карточка для канала',f"cat:f:{p['id']}",'primary')],
+                         [button('⬅ К товарам',f"cat:l:{token(group_of(p))}:{p['supplier']}:{token(kind_of(p))}:0")],
                          [button('🏠 Главное меню','cat:home')]])
             edit_message_text(chat_id,message_id,'\n'.join(description(p)[:5]),kb)
         elif action=='t': send_card(chat_id,p)
@@ -283,7 +326,7 @@ def handle(chat_id,message_id,data):
             if len(data['caption'])>1024:
                 return show(chat_id,message_id,'Прайс серии слишком длинный для подписи фото в канале. Выберите меньшую серию в прежнем меню.',[[button('⬅ К товару',f"cat:p:{p['id']}")]])
             text=f'🎨 <b>Создать карточку для канала · {html.escape(FOTOGEN_CARD_MODE.upper())}</b>\nГрафитовый фон, белый текст и стеклянные плашки.\nФото товара сохраняется без изменения формы.\n\nПодпись к публикации:\n'+data['caption']
-            return show(chat_id,message_id,text,[[button('🎨 Генерировать в моём стиле',f"cat:j:{p['id']}:{parts[3]}",'primary')],
+            return show(chat_id,message_id,text,[[button(f'🎨 Генерировать · {FOTOGEN_CARD_MODE.upper()}',f"cat:j:{p['id']}:{parts[3]}",'primary')],
                 [button('⬅ Изменить наценку',f"cat:f:{p['id']}")],[button('🏠 Главное меню','cat:home')]])
         elif action=='j':
             from stock_report_bot.catalog_generation import submit
@@ -298,6 +341,6 @@ def handle(chat_id,message_id,data):
             send_series(chat_id,p,int(parts[3]))
             send_message(chat_id,'Готово — фото, прайс серии и ТТХ/УТП можно переслать клиенту.',keyboard([
                 [button('⬅ Изменить наценку',f"cat:c:{p['id']}")],
-                [button('🎨 Создать карточку для канала',f"cat:q:{p['id']}:{parts[3]}",'primary')],
+                [button('🎨 Карточка для канала',f"cat:q:{p['id']}:{parts[3]}",'primary')],
                 [button('🏠 Главное меню','cat:home')]]))
     else: root(chat_id,message_id,data)

@@ -72,4 +72,43 @@ class NavigationTest(unittest.TestCase):
             m.search(1,'ksga26')
             self.assertIn('Найдено: 1',send.call_args.args[1])
 
+    def test_long_category_is_complete_in_text_and_button_is_short(self):
+        name='Котел настенный газовый двухконтурный с раздельными теплообменниками и принудительным дымоудалением'
+        p=dict(product('1'),group_name='Котлы',kind=name)
+        callback=f'cat:v:{m.token(m.group_of(p))}:daichi:0'
+        with patch.object(m.catalog,'products',return_value=[p]),patch.object(m,'edit_message_text') as edit:
+            m.root(1,2,callback)
+            self.assertIn(name,edit.call_args.args[2])
+            b=edit.call_args.args[3]['inline_keyboard'][0][0]
+            self.assertLessEqual(len(b['text']),26)
+            self.assertIn('1.',b['text'])
+            self.assertIn(m.token(name),b['callback_data'])
+
+    def test_full_model_and_quantity_are_outside_button(self):
+        p=dict(product('1'),model='RUH-AN300/4.0E-SV-VERY-LONG-MODEL',brand='ROYAL CLIMA')
+        callback=f'cat:l:{m.token(m.group_of(p))}:daichi:{m.token(m.kind_of(p))}:0'
+        with patch.object(m.catalog,'products',return_value=[p]),patch.object(m,'edit_message_text') as edit:
+            m.root(1,2,callback)
+            text=edit.call_args.args[2]
+            self.assertIn('ROYAL CLIMA '+p['model'],text)
+            self.assertIn('Остаток: 3 шт.',text)
+            self.assertLessEqual(len(edit.call_args.args[3]['inline_keyboard'][0][0]['text']),26)
+
+    def test_same_short_names_are_distinguished_by_numbers(self):
+        a=m.short_choice(1,'Газовые котлы',4); b=m.short_choice(2,'Газовые котлы',4)
+        self.assertNotEqual(a,b)
+
+    def test_search_pagination_preserves_full_model_names(self):
+        rows=[product(f'MODEL-{i}-LONG-EXACT-MANUFACTURER-CODE') for i in range(12)]
+        with patch.object(m.catalog,'products',return_value=rows),patch.object(m,'send_message') as send, \
+             patch.object(m,'edit_message_text') as edit:
+            m.search(1,'MODEL')
+            kb=send.call_args.args[2]['inline_keyboard']
+            next_button=next(b for row in kb for b in row if b['callback_data'].startswith('cat:z:'))
+            m.handle(1,2,next_button['callback_data'])
+            self.assertIn(rows[8]['model'],edit.call_args.args[2])
+            self.assertIn('<b>9.',edit.call_args.args[2])
+            buttons=[b for row in edit.call_args.args[3]['inline_keyboard'] for b in row]
+            self.assertEqual(sum(b['callback_data'].startswith('cat:p:') for b in buttons),4)
+
 if __name__=='__main__': unittest.main()
