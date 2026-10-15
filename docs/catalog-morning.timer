@@ -1,0 +1,10 @@
+[Unit]
+Description=SplitHub morning report at 08:30 Moscow
+
+[Timer]
+OnCalendar=*-*-* 08:30:00 Europe/Moscow
+Persistent=true
+Unit=catalog-morning.service
+
+[Install]
+WantedBy=timers.target

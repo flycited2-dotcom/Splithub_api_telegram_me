@@ -13,9 +13,9 @@ config = Config(RepositoryEnv(_ENV_PATH)) if os.path.exists(_ENV_PATH) else env_
 DB = {
     'host': config('DB_HOST', default='localhost'),
     'port': config('DB_PORT', default='5432'),
-    'dbname': config('DB_NAME'),
-    'user': config('DB_USER'),
-    'password': config('DB_PASSWORD'),
+    'dbname': config('DB_NAME', default=''),
+    'user': config('DB_USER', default=''),
+    'password': config('DB_PASSWORD', default=''),
 }
 
 TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
@@ -33,6 +33,7 @@ BREEZ_AUTH_HEADER = config('BREEZ_AUTH_HEADER', default='')
 # карточку» вернёт ошибку «не задан» (см. fotogen_bridge.submit_card).
 FOTOGEN_API_URL = config('FOTOGEN_API_URL', default='')
 FOTOGEN_API_TOKEN = config('FOTOGEN_API_TOKEN', default='')
+FOTOGEN_CARD_MODE = config('FOTOGEN_CARD_MODE', default='mcp').strip().lower()
 
 # JAC — 4-й поставщик без API. Путь к JSON, который пишет скрапер b2b-jac.com
 # (проект osatakti_mdv_b2b, файл jac_stock_latest.json). Пусто → JAC не включается.

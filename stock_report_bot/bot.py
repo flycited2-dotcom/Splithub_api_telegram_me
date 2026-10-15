@@ -14,7 +14,7 @@ import time
 
 import psycopg2
 
-from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID
+from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID, config
 from stock_report_bot.breez import fetch_breez_base_by_nc, fetch_breez_utp_by_nc
 from stock_report_bot.db import fetch_stock_rows, fetch_tech_values
 from stock_report_bot.jac import load_jac_rows
@@ -34,6 +34,7 @@ _UTP_TTL = 1800      # УТП Бриза из API (меняется редко �
 _JAC_UTP_TTL = 3600  # УТП JAC из файла скрапера (меняются редко)
 _cache = {'rows': (0, None), 'breez': (0, None), 'utp': (0, None), 'jac_utp': (0, None),
           'jac_photos': (0, None)}
+_search_chats = set()
 
 
 def _rows():
@@ -119,6 +120,32 @@ def _handle_callback(cb):
     if not _is_owner(from_id):
         answer_callback_query(cq_id)
         return
+    if data.startswith('cat:'):
+        from stock_report_bot import catalog_menu
+        answer_callback_query(cq_id)
+        _search_chats.discard(chat_id)
+        logger.info('catalog callback action=%s', data.split(':')[1])
+        if data=='cat:find':
+            _search_chats.add(chat_id)
+            send_message(chat_id,'🔎 Напишите модель, артикул или бренд:',
+                         catalog_menu.keyboard([[catalog_menu.button('⬅ Главное меню','cat:home')]]))
+            return
+        if data=='cat:old':
+            send_message(chat_id,menu.text_suppliers(),menu.kb_suppliers(_rows()))
+            send_message(chat_id,'📋 Прежнее меню серий и фотогенератор.',
+                         catalog_menu.keyboard([[catalog_menu.button('🏠 Главное меню','cat:home')]]))
+            return
+        if data=='cat:report':
+            from stock_report_bot.report import build_report_chunks
+            for chunk in build_report_chunks(_rows(),breez_base=_breez_base()):
+                send_message(chat_id,chunk)
+            send_message(chat_id,'Назад:',catalog_menu.keyboard([[catalog_menu.button('🏠 Главное меню','cat:home')]]))
+            return
+        try:
+            catalog_menu.handle(chat_id, message_id, data)
+        except (IndexError, KeyError, ValueError):
+            send_message(chat_id, 'Меню обновилось — откройте /catalog заново.')
+        return
     parts = menu.cb_unpack(data)
     action = parts[0] if parts else ''
     rows = _rows()
@@ -198,9 +225,9 @@ def _handle_callback(cb):
             # Подпись-прайс для канала: цены по выбранной наценке pct (см. channel_caption).
             inverter = (any('нвертор' in (l or '').lower() for l in spec_lines)
                         or 'нвертор' in (series or '').lower())
-            caption = channel_caption.build_channel_caption(
+            caption = channel_caption.build_publication_caption(
                 positions, pct, brand, series, source,
-                breez_base=breez_base, inverter=inverter)
+                breez_base=breez_base, inverter=inverter, specs_lines=spec_lines)
             if not photo_url:
                 edit_message_text(chat_id, message_id,
                     '⚠️ Фото товара не найдено в базе. Загрузите фото вручную в фотоген-боте.',
@@ -230,11 +257,32 @@ def _handle_message(msg):
     text = (msg.get('text') or '').strip()
     if not _is_owner(from_id):
         return
+    if chat_id in _search_chats and text and not text.startswith('/') and text!=menu.MENU_BUTTON_TEXT:
+        from stock_report_bot import catalog_menu
+        _search_chats.discard(chat_id)
+        catalog_menu.search(chat_id,text)
+        return
+    if text in ('/catalog', '/excel', '/search') or (config('CATALOG_ENABLED', default=False, cast=bool)
+            and text in ('/start', '/menu', menu.MENU_BUTTON_TEXT)):
+        from stock_report_bot import catalog_menu
+        if text == '/excel':
+            catalog_menu.handle(chat_id, None, 'cat:x')
+        elif text=='/search':
+            _search_chats.add(chat_id)
+            send_message(chat_id,'🔎 Напишите модель, артикул или бренд:',
+                         catalog_menu.keyboard([[catalog_menu.button('⬅ Главное меню','cat:home')]]))
+        elif text=='/catalog':
+            catalog_menu.root(chat_id)
+        else:
+            _search_chats.discard(chat_id)
+            if text=='/start': send_message(chat_id,'📋 Главное меню доступно кнопкой внизу.',menu.MAIN_REPLY_KB)
+            catalog_menu.home(chat_id)
+        return
     if text == '/start':
         # один раз ставим постоянную кнопку «📋 Меню» — дальше владелец просто тапает её
         send_message(chat_id, 'Готово 👇 Жмите «📋 Меню» в любой момент.', menu.MAIN_REPLY_KB)
         send_message(chat_id, menu.text_suppliers(), menu.kb_suppliers(_rows()))
-    elif text in ('/menu', menu.MENU_BUTTON_TEXT):
+    elif text in ('/menu', '/series', menu.MENU_BUTTON_TEXT):
         send_message(chat_id, menu.text_suppliers(), menu.kb_suppliers(_rows()))
 
 
@@ -243,7 +291,11 @@ def run():
         logger.error('TELEGRAM_OWNER_CHAT_ID не задан — некого слушать')
         return 1
     try:
-        set_my_commands([{'command': 'menu', 'description': '📋 Остатки с наценкой'}])
+        set_my_commands([{'command': 'menu', 'description': '📚 Каталог товаров'},
+                         {'command': 'catalog', 'description': '📂 Группы и виды товаров'},
+                         {'command': 'excel', 'description': '📊 Остатки Excel'},
+                         {'command': 'search', 'description': '🔎 Поиск модели'},
+                         {'command': 'series', 'description': '🎨 Серии и фотогенератор'}])
     except Exception as exc:
         logger.warning('setMyCommands не удалось: %s', exc)
     logger.info('menu-bot запущен, long-polling…')

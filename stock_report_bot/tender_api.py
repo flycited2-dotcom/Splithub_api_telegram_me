@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from stock_report_bot.breez import fetch_breez_base_by_nc
 from stock_report_bot.config import (
+    config,
     TENDER_CLIMATE_API_HOST,
     TENDER_CLIMATE_API_PORT,
     TENDER_CLIMATE_API_TOKEN,
@@ -41,6 +42,21 @@ _GENERIC_TOKENS = {
 
 def load_catalog_rows() -> list[dict[str, object]]:
     """Собрать единый живой срез четырёх поставщиков, не меняя источники."""
+    if config('CATALOG_ENABLED', default=False, cast=bool):
+        from stock_report_bot.catalog import products
+        return [{
+            'source': p['supplier'], 'supplier_name': p['supplier'], 'sku': p['sku'],
+            'brand': p.get('brand',''), 'series': p.get('series',''),
+            'model': p.get('model',''), 'name': p['title'],
+            'price_gross': float(p['purchase_price']) if p.get('purchase_price') is not None else None,
+            'stock_quantity': p['quantity'], 'warehouse': p['warehouse'],
+            'category': p['group_name'], 'kind': p['kind'],
+            'image_url': next(iter(p.get('images') or []), ''),
+            'images': p.get('images',[]), 'currency': p.get('currency','RUB'),
+            'updated_at': p['updated_at'], 'utp': p.get('utp',''),
+            'quantity_lower_bound': p.get('quantity_lower_bound',False),
+            'specs': {s['title']:s['value'] for s in p.get('specs',[])},
+        } for p in products()]
     rows = [dict(row) for row in fetch_stock_rows()]
     rows.extend(dict(row) for row in load_jac_rows())
     try:
@@ -184,7 +200,12 @@ def _api_product(row: dict[str, object]) -> dict[str, object]:
         "description": f"{supplier}; склад {row.get('warehouse') or 'не указан'}; остаток {quantity}",
         "productUrl": str(row.get("product_url") or ""),
         "imageUrl": str(row.get("image_url") or ""),
-        "updatedAt": datetime.now(timezone.utc).isoformat(),
+        "updatedAt": row.get('updated_at') or datetime.now(timezone.utc).isoformat(),
+        "currency": row.get('currency', 'RUB'),
+        "kind": row.get('kind', ''),
+        "utp": row.get('utp', ''),
+        "images": row.get('images', []),
+        "quantityLowerBound": row.get('quantity_lower_bound', False),
         "attributes": attributes,
         "specifications": specifications,
     }

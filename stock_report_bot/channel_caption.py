@@ -140,3 +140,42 @@ def build_channel_caption(positions, pct, brand, series, source,
     body = [f'❄️ {(brand or "").strip()}', head2, '──────────────────']
     body += [f'{label} — {_fmt_price(price)}' for label, price in rows]
     return f'<blockquote>{html.escape(chr(10).join(body))}</blockquote>'
+
+
+def build_publication_caption(positions, pct, brand, series, source,
+                              breez_base=None, inverter=False, specs_lines=()):
+    """Photo caption: title, highlighted selling prices, then verified features.
+
+    Keep all model prices intact. Only complete feature lines may be omitted
+    to fit Telegram's caption limit; the caller rejects an oversized price list.
+    """
+    legacy = build_channel_caption(positions, pct, brand, series, source,
+                                   breez_base=breez_base, inverter=inverter)
+    price_lines = html.unescape(legacy[len('<blockquote>'):-len('</blockquote>')]).splitlines()[3:]
+    for row in positions:
+        if _price_for(row, breez_base) is None:
+            price_lines.append(f'{_model_code(row, brand)} — Цена по запросу')
+    if not price_lines:
+        price_lines = ['Цена по запросу']
+    if len(positions) == 1 and len(price_lines) == 1 and '₽' in price_lines[0]:
+        price_lines = [price_lines[0].split(' — ', 1)[-1]]
+    title = f'{(brand or "").strip()} {short_series(series)}'.strip()
+    if inverter:
+        title += ' · инвертор'
+    price_text = html.escape('\n'.join(price_lines))
+    caption = f'{html.escape(title)}\n<blockquote>💎 <b>{price_text}</b></blockquote>'
+    features = []
+    for line in specs_lines or ():
+        for feature in str(line).splitlines():
+            feature = feature.strip().lstrip('✓✔✅• ').strip()
+            if feature:
+                features.append('✓ ' + html.escape(feature))
+    if features:
+        heading = '\n' + '═' * 26 + '\nКлючевые особенности:'
+        for feature in features:
+            addition = (heading if heading else '') + '\n' + feature
+            if len(caption + addition) > 1024:
+                break
+            caption += addition
+            heading = ''
+    return caption

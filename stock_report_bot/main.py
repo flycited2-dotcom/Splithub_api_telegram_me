@@ -5,7 +5,7 @@ import logging
 import sys
 import time
 
-from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID
+from stock_report_bot.config import TELEGRAM_OWNER_CHAT_ID, config
 from stock_report_bot.breez import fetch_breez_base_by_nc
 from stock_report_bot.db import fetch_stock_rows
 from stock_report_bot.jac import load_jac_rows
@@ -20,6 +20,9 @@ def main():
     if not TELEGRAM_OWNER_CHAT_ID:
         logger.error('TELEGRAM_OWNER_CHAT_ID не задан — отправлять некому')
         return 1
+    if config('CATALOG_ENABLED', default=False, cast=bool):
+        from stock_report_bot.catalog_daily import daily
+        return daily()
     rows = fetch_stock_rows()
     rows += load_jac_rows()                  # 4-й поставщик JAC из файла (если настроен)
     breez_base = fetch_breez_base_by_nc()   # опт (base) Бриза напрямую из Бриз API
